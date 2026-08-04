@@ -198,6 +198,12 @@ function togglePeriodPanel(){
   document.getElementById('period-panel').classList.toggle('open');
 }
 
+// Закрыть панель "Периоды" при клике снаружи (раньше не закрывалась вообще, только повторным
+// кликом по кнопке "⚙ Периоды" — снаружи никакого обработчика не было).
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.periodwrap')) document.getElementById('period-panel').classList.remove('open');
+});
+
 function periodPanelAll(show){
   document.querySelectorAll('#period-checks input[type=checkbox]').forEach(cb=>{
     cb.checked=show;
