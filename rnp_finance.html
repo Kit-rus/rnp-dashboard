@@ -145,7 +145,22 @@ let PERIOD='month'; // 'month' | 'week'
 let VIEW='pl'; // 'pl' | 'abc'
 let ROW_SEQ=0;
 let PERIOD_COUNT=12;
-const HIDDEN_PERIODS=new Set(); // скрытые периоды (iso-ключ месяца/недели), сохраняется между перезагрузками таблицы
+const HIDDEN_PERIODS=new Set(); // скрытые периоды (iso-ключ месяца/недели) текущей пары МП+period, персистится в localStorage
+
+function hpStorageKey(){ return `rnp_hidden_periods_${MP}_${PERIOD}`; }
+
+function loadHiddenPeriods(){
+  HIDDEN_PERIODS.clear();
+  try{
+    const raw=localStorage.getItem(hpStorageKey());
+    if(raw) JSON.parse(raw).forEach(k=>HIDDEN_PERIODS.add(k));
+  }catch(e){ /* повреждённые данные в localStorage — игнорируем, начинаем с пустого */ }
+}
+
+function saveHiddenPeriods(){
+  try{ localStorage.setItem(hpStorageKey(), JSON.stringify([...HIDDEN_PERIODS])); }
+  catch(e){ /* localStorage недоступен (приватный режим и т.п.) — просто не сохраняем */ }
+}
 
 async function sbGet(path){
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{headers:{
@@ -162,6 +177,7 @@ function setMP(mp){
   MP=mp;
   document.getElementById('b-ozon').classList.toggle('on',mp==='ozon');
   document.getElementById('b-wb').classList.toggle('on',mp==='wb');
+  loadHiddenPeriods();
   VIEW==='abc' ? loadABC() : load();
 }
 
@@ -169,7 +185,7 @@ function setPeriod(p){
   PERIOD=p;
   document.getElementById('b-month').classList.toggle('on',p==='month');
   document.getElementById('b-week').classList.toggle('on',p==='week');
-  HIDDEN_PERIODS.clear(); // разное количество/набор периодов у месяцев и недель — сброс
+  loadHiddenPeriods(); // у месяцев и недель разные ключи периодов — своя сохранённая настройка на каждый
   load();
 }
 
@@ -187,11 +203,13 @@ function periodPanelAll(show){
     cb.checked=show;
     if(show) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
   });
+  saveHiddenPeriods();
   renderTable();
 }
 
 function onPeriodCheck(cb){
   if(cb.checked) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
+  saveHiddenPeriods();
   renderTable();
 }
 
@@ -547,6 +565,7 @@ function renderTable(){
   }
 }
 
+loadHiddenPeriods();
 load();
 </script>
 </body>
