@@ -349,7 +349,11 @@ function toggleRows(id){
 
 // values: массив по месяцам (total). catValues: {category: [значения по месяцам]}
 function metricBlock(label, values, catValues, opts={}){
-  const {pctBase=null, signColor=false, fmt='money'} = opts;
+  // pctBase — база %% для ИТОГОВОЙ строки (общая выручка МП за период).
+  // pctBaseCat — база %% для строк КАТЕГОРИЙ: своя выручка каждой категории,
+  // а не общая — иначе % занижается для мелких категорий и завышается для крупной
+  // (напр. "Джемперы" от общей выручки МП давали 1.3% вместо реальных ~40% от своей выручки).
+  const {pctBase=null, pctBaseCat=null, signColor=false, fmt='money'} = opts;
   const id='m'+(ROW_SEQ++);
   const fmtCell = v => {
     if(v===null||v===undefined) return '—';
@@ -367,8 +371,9 @@ function metricBlock(label, values, catValues, opts={}){
   let h=`<tr class="total"><td class="lbl" onclick="${hasCat?`toggleRows('${id}')`:''}">${hasCat?`<span class="chev" id="chev-${id}">▶</span> `:''}${label}</td>${cells}</tr>`;
   if(hasCat){
     for(const [cat, catVals] of Object.entries(catValues)){
+      const catBase = pctBaseCat ? pctBaseCat[cat] : pctBase;
       const catCells = catVals.map((v,i)=>{
-        let pctLine = pctBase ? `<span class="pct">${Pct(v,pctBase[i])}</span>` : '';
+        let pctLine = catBase ? `<span class="pct">${Pct(v,catBase[i])}</span>` : '';
         return `<td>${fmtCell(v)}${pctLine}</td>`;
       }).join('');
       h+=`<tr class="cat hidden" data-parent="${id}"><td class="lbl">${cat}</td>${catCells}</tr>`;
@@ -481,6 +486,7 @@ function renderTable(){
     const sppPct = revMatched.map((v,i)=>v>0?(v-revAfterSpp[i])/v*100:null);
     const avgCheckClient = qtyMatched.map((v,i)=>v>0?revAfterSpp[i]/v:null);
 
+    const catRevenue = byCat('revenue'); // база для %% строк-категорий (своя выручка, не общая по МП)
     const catRevAfter = byCat('revenue_after_spp');
     const catRevMatched = byCat('revenue_matched');
     const catQtyMatched = byCatInt('qty_matched');
@@ -514,15 +520,15 @@ function renderTable(){
 
     // ── 3. Переменные расходы МП ──
     h+=sectionRow('Переменные расходы МП', nCols);
-    h+=metricBlock('Комиссия МП', commission, byCat('commission_sum'), {pctBase:revenue});
-    h+=metricBlock('Эквайринг', acquiring, byCat('acquiring_sum'), {pctBase:revenue});
-    h+=metricBlock('Логистика до клиента', logiTo, byCat('logistics_to'), {pctBase:revenue});
-    h+=metricBlock('Логистика от клиента (возвраты)', logiFrom, byCat('logistics_from'), {pctBase:revenue});
+    h+=metricBlock('Комиссия МП', commission, byCat('commission_sum'), {pctBase:revenue, pctBaseCat:catRevenue});
+    h+=metricBlock('Эквайринг', acquiring, byCat('acquiring_sum'), {pctBase:revenue, pctBaseCat:catRevenue});
+    h+=metricBlock('Логистика до клиента', logiTo, byCat('logistics_to'), {pctBase:revenue, pctBaseCat:catRevenue});
+    h+=metricBlock('Логистика от клиента (возвраты)', logiFrom, byCat('logistics_from'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Маржинальная прибыль (М2)', m2, null, {pctBase:revenue, signColor:true});
 
     // ── 4. Продвижение ──
     h+=sectionRow('Продвижение', nCols);
-    h+=metricBlock('Реклама на МП (ДРР)', adSpend, byCat('ad_spend'), {pctBase:revenue});
+    h+=metricBlock('Реклама на МП (ДРР)', adSpend, byCat('ad_spend'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Самовыкупы', selfBuy, null, {pctBase:revenue});
     h+=metricBlock('Блогеры', bloggers, null, {pctBase:revenue});
     h+=metricBlock('Инструменты менеджера', tools, null, {pctBase:revenue});
