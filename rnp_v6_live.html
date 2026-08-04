@@ -358,6 +358,57 @@ async function loadVisibilityRules(){
   }
 }
 
+// ─── Комментарии к артикулам ───────────────────────────────────
+let COMMENTS={}; // seller_article -> {comment, article_id}
+
+async function loadComments(){
+  try{
+    const url=`${SB_URL}/rest/v1/article_comments?select=id,article_id,comment,articles(seller_article,marketplace)&limit=5000`;
+    const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+    if(!r.ok)return;
+    const data=await r.json();
+    COMMENTS={};
+    for(const row of data){
+      if(row.articles) COMMENTS[row.articles.seller_article]={comment:row.comment,article_id:row.article_id};
+    }
+  }catch(e){
+    console.warn('loadComments error:',e);
+  }
+}
+
+async function editComment(sellerArticle,mp){
+  const cur=COMMENTS[sellerArticle];
+  const text=prompt('Комментарий к артикулу:',cur?cur.comment:'');
+  if(text===null)return; // отмена
+  try{
+    let articleId=cur?cur.article_id:null;
+    if(!articleId){
+      const r=await fetch(`${SB_URL}/rest/v1/articles?select=id&seller_article=eq.${encodeURIComponent(sellerArticle)}&marketplace=eq.${encodeURIComponent(mp)}`,
+        {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+      const rows=await r.json();
+      if(!rows.length){alert('Артикул не найден в справочнике');return;}
+      articleId=rows[0].id;
+    }
+    if(!text.trim()){
+      // Пустой текст — удаляем комментарий
+      await fetch(`${SB_URL}/rest/v1/article_comments?article_id=eq.${articleId}`,
+        {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+      delete COMMENTS[sellerArticle];
+    }else{
+      await fetch(`${SB_URL}/rest/v1/article_comments`,{
+        method:'POST',
+        headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`,'Content-Type':'application/json',
+                 'Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify({article_id:articleId,comment:text.trim(),updated_at:new Date().toISOString()}),
+      });
+      COMMENTS[sellerArticle]={comment:text.trim(),article_id:articleId};
+    }
+    render();
+  }catch(e){
+    alert('Ошибка сохранения комментария: '+e.message);
+  }
+}
+
 // Проверяет, должен ли артикул отображаться в указанном месяце (CYEAR/CMONTH)
 function isArticleVisible(art){
   // 1. Ручное скрытие: скрываем если текущий месяц ПОСЛЕ last_visible_month
@@ -595,6 +646,7 @@ async function sMonth(v){
   CYEAR=y;CMONTH=mo;DATA[CMP]=null;
   // Перечитываем правила видимости (могли измениться в article_settings.html)
   await loadVisibilityRules();
+  await loadComments();
   await reloadData();
 }
 function sM(m,btn){CM=m;document.querySelectorAll('.mt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');render();}
@@ -920,7 +972,10 @@ function render(){
           </div>`;
       html+=`<tr class="art-row" data-cat="${catId}" style="${isCollapsed?'display:none':''}">
         <td class="s0">${photoCell}</td>
-        <td class="s1"><span class="art-name" title="${art.name}">${art.name}</span></td>
+        <td class="s1"><span class="art-name" title="${art.name}">${art.name}</span><span
+          onclick="editComment('${art.name.replace(/'/g,"\\'")}','${CMP}')"
+          title="${COMMENTS[art.name]?COMMENTS[art.name].comment.replace(/"/g,'&quot;'):'Добавить комментарий'}"
+          style="cursor:pointer;margin-left:4px;opacity:${COMMENTS[art.name]?1:0.35};font-size:11px">💬</span></td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
       days.forEach((day,di)=>{
         const v=getV(art,day,CM);
@@ -954,6 +1009,7 @@ async function initApp(){
     await Promise.all([
       populateMonthSel(),
       loadVisibilityRules(),
+      loadComments(),
     ]);
     await reloadData();
   }catch(e){
