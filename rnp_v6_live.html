@@ -973,7 +973,7 @@ function render(){
       html+=`<tr class="art-row" data-cat="${catId}" style="${isCollapsed?'display:none':''}">
         <td class="s0">${photoCell}</td>
         <td class="s1"><span class="art-name" title="${art.name}">${art.name}</span><span
-          onclick="editComment('${art.name.replace(/'/g,"\\'")}','${CMP}')"
+          onclick="editComment('${art.name.replace(/'/g,"\\'")}','${MP_DB[CMP]||CMP}')"
           title="${COMMENTS[art.name]?COMMENTS[art.name].comment.replace(/"/g,'&quot;'):'Добавить комментарий'}"
           style="cursor:pointer;margin-left:4px;opacity:${COMMENTS[art.name]?1:0.35};font-size:11px">💬</span></td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
