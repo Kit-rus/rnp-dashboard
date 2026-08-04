@@ -314,17 +314,24 @@ async function loadMonthData(mp,year,month){
   const last=new Date(year,month,0).getDate();
   const end=`${year}-${pad(month)}-${pad(last)}`;
   const mp_db=MP_DB[mp]||mp;
-  const params=new URLSearchParams({
-    'marketplace': `eq.${mp_db}`,
-    'date': `gte.${start}`,
-    'order': 'category,seller_article,date',
-    'limit': '5000',
-  });
-  // Supabase PostgREST требует отдельные параметры для gte/lte
-  const url=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&date=gte.${start}&date=lte.${end}&order=category,seller_article,date&limit=5000`;
-  const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
-  if(!r.ok){const t=await r.text();throw new Error(`loadMonthData ${r.status}: ${t}`);}
-  return r.json();
+  // PostgREST/Supabase молча режет ответ до своего серверного максимума строк (обычно 1000),
+  // даже если в URL стоит limit=5000 — при сортировке по category это тихо обрезало
+  // алфавитно последние категории (напр. "Шубы" пропадали целиком при большом месяце).
+  // Поэтому пагинируем сами через offset, пока не придёт страница короче pageSize.
+  const baseUrl=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&date=gte.${start}&date=lte.${end}&order=category,seller_article,date`;
+  const pageSize=1000;
+  let all=[];
+  let offset=0;
+  while(true){
+    const url=`${baseUrl}&limit=${pageSize}&offset=${offset}`;
+    const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+    if(!r.ok){const t=await r.text();throw new Error(`loadMonthData ${r.status}: ${t}`);}
+    const batch=await r.json();
+    all=all.concat(batch);
+    if(batch.length<pageSize) break;
+    offset+=pageSize;
+  }
+  return all;
 }
 
 // ─── Visibility rules loading ─────────────────────────────────
