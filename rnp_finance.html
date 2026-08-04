@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Финансовый отчёт — РНП</title>
+<style>
+:root{
+  --bg:#0f1115;--card:#171a21;--border:#262b36;--text:#e6e9ef;--text2:#9aa3b2;
+  --pos:#3fb668;--neg:#e05c5c;--accent:#4f8cff;--head:#1c2029;--catbg:#14171f;
+}
+@media (prefers-color-scheme: light){
+  :root{--bg:#f5f6f8;--card:#fff;--border:#e2e5ea;--text:#1a1d23;--text2:#6b7280;--head:#f0f1f4;--catbg:#fafbfc;}
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:13px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;padding:20px}
+.w{max-width:1400px;margin:0 auto}
+h1{font-size:18px;margin-bottom:4px}
+.sub{color:var(--text2);font-size:12px;margin-bottom:16px}
+a.back{color:var(--accent);text-decoration:none;font-size:12px}
+.mptabs{display:flex;gap:6px;margin:14px 0}
+.mpt{padding:6px 16px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.mpt.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+th{color:var(--text2);text-align:right;font-weight:500;padding:5px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card)}
+th:first-child,td.lbl{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:250px}
+td{text-align:right;padding:5px 10px;border-bottom:1px solid var(--border)}
+tr.section td{padding-top:14px;font-weight:700;color:var(--accent);border-bottom:none;background:var(--head)}
+tr.total td{font-weight:700;border-top:1px solid var(--border);cursor:pointer}
+tr.total td.lbl{background:var(--card)}
+tr.total:hover td{background:var(--head)}
+tr.total td.lbl:hover{background:var(--head)}
+tr.cat td{color:var(--text2);background:var(--catbg)}
+tr.cat td.lbl{background:var(--catbg);padding-left:22px}
+tr.cat.hidden{display:none}
+.chev{display:inline-block;width:12px;color:var(--accent)}
+.pct{color:var(--text2);font-size:11px;display:block}
+.pos{color:var(--pos)}
+.neg{color:var(--neg)}
+.muted{color:var(--text2)}
+.loading{color:var(--text2);padding:30px;text-align:center}
+.note{color:var(--text2);font-size:11px;margin-top:10px}
+input[type=date],select{padding:5px 8px;border:1px solid var(--border);background:var(--card);color:var(--text);
+  border-radius:6px;font-size:12px;font-family:inherit}
+.go{padding:6px 16px;border:none;background:var(--accent);color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.summary{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.sumcard{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:110px}
+.sumcard .v{font-size:18px;font-weight:700}
+.sumcard .l{font-size:11px;color:var(--text2)}
+.badge{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;color:#fff;font-weight:700;font-size:11px}
+.badge.A{background:#3fb668}
+.badge.B{background:#e0a83c}
+.badge.C{background:#e05c5c}
+tr.group-A{border-left:3px solid #3fb668}
+tr.group-B{border-left:3px solid #e0a83c}
+tr.group-C{border-left:3px solid #e05c5c}
+td.lbl2{text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.hidden-view{display:none}
+.periodwrap{position:relative;display:inline-block}
+.periodbtn{padding:6px 12px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  border-radius:6px;cursor:pointer;font-size:12px}
+.periodpanel{position:absolute;top:110%;left:0;z-index:20;background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:10px;min-width:220px;max-height:320px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.25);display:none}
+.periodpanel.open{display:block}
+.periodpanel label{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 2px;cursor:pointer;white-space:nowrap}
+.periodpanel .pp-actions{display:flex;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.periodpanel .pp-actions button{font-size:11px;padding:3px 8px;border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="w">
+  <a class="back" href="rnp_v6_live.html">← Дашборд</a>
+  <a class="back" href="http://localhost:8792" target="_blank" style="margin-left:14px"
+     title="Импорт файлов WB и OZON драг&дропом (нужен запущенный execution/import_server.py, порт 8792)">
+    📥 Импорт файлов
+  </a>
+  <h1 style="margin-top:8px">💹 Финансовый отчёт</h1>
+  <div class="sub">P&amp;L по месяцам. Выручка — «до СПП» (деньги на р/с), проценты считаются от неё. Клик по жирной строке — раскрыть категории.</div>
+
+  <div class="mptabs">
+    <button class="mpt on" id="b-ozon" onclick="setMP('ozon')">OZON</button>
+    <button class="mpt"    id="b-wb"   onclick="setMP('wb')">WB</button>
+    <span style="width:1px;background:var(--border);margin:0 4px"></span>
+    <button class="mpt on" id="b-view-pl"  onclick="setView('pl')">P&amp;L</button>
+    <button class="mpt"    id="b-view-abc" onclick="setView('abc')">ABC-анализ</button>
+  </div>
+
+  <!-- ── P&L (месяц/неделя) ──────────────────────────────── -->
+  <div id="view-pl">
+    <div class="mptabs">
+      <button class="mpt on" id="b-month" onclick="setPeriod('month')">Месяц</button>
+      <button class="mpt"    id="b-week"  onclick="setPeriod('week')">Неделя</button>
+      <span style="width:1px;background:var(--border);margin:0 4px"></span>
+      <label class="muted" style="font-size:12px">Показать последних
+        <select id="period-count" onchange="onCountChange()" style="padding:4px 6px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;font-size:12px">
+          <option value="3">3</option><option value="6">6</option>
+          <option value="8">8</option><option value="10">10</option>
+          <option value="12" selected>12</option><option value="24">24</option>
+          <option value="9999">Все</option>
+        </select>
+      </label>
+      <div class="periodwrap">
+        <button class="periodbtn" onclick="togglePeriodPanel()">⚙ Периоды</button>
+        <div class="periodpanel" id="period-panel">
+          <div class="pp-actions">
+            <button onclick="periodPanelAll(true)">Показать все</button>
+            <button onclick="periodPanelAll(false)">Скрыть все</button>
+          </div>
+          <div id="period-checks"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div id="tbl" class="loading">Загрузка…</div></div>
+    <div class="note">Самовыкупы / блогеры / инструменты менеджера — ручной ввод в таблицу <code>manual_expenses</code> (marketplace, month, category: самовыкупы|блогеры|инструменты, amount). Пока не заполнено — строки показывают 0. Разбивка по категориям для них не считается (нет source-данных по категориям).</div>
+    <div class="note">Выручка после СПП — из файла «Заказы» (OZON убрал это поле из API 12.11.2025), сопоставляется по номеру отправления. Покрытие частичное — см. «сопоставлено» под строкой; разбивки по категориям для СПП нет.</div>
+    <div class="note">«Прибыль МП» и «ЧП» пока совпадают: постоянные расходы и налог/УСН сознательно не включены в отчёт (нет источника данных) — как только появятся, ЧП станет отдельной строкой ниже.</div>
+  </div>
+
+  <!-- ── ABC-анализ ──────────────────────────────────────── -->
+  <div id="view-abc" class="hidden-view">
+    <div class="sub" style="margin-top:0">Классификация по выручке: сортировка по убыванию, накопительный % — A ≤80%, B ≤95%, C ≤100%.</div>
+    <div class="mptabs" style="align-items:center">
+      <label class="muted" style="font-size:12px">С <input type="date" id="d-from"></label>
+      <label class="muted" style="font-size:12px">по <input type="date" id="d-to"></label>
+      <select id="grain">
+        <option value="article">По артикулу</option>
+        <option value="model">По цветомодели</option>
+        <option value="category">По категории</option>
+      </select>
+      <button class="go" onclick="loadABC()">Построить</button>
+    </div>
+    <div id="abc-summary" class="summary"></div>
+    <div class="card"><div id="abc-tbl" class="loading">Выбери период и нажми «Построить»</div></div>
+    <div class="note">Цветомодель — артикул без размера (всё до последнего «/»). Выручка/себестоимость/комиссия/логистика — фактические данные за выбранный период (не месячный агрегат).</div>
+  </div>
+</div>
+
+<script>
+const SB_URL='https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON='sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+let MP='ozon';
+let PERIOD='month'; // 'month' | 'week'
+let VIEW='pl'; // 'pl' | 'abc'
+let ROW_SEQ=0;
+let PERIOD_COUNT=12;
+const HIDDEN_PERIODS=new Set(); // скрытые периоды (iso-ключ месяца/недели), сохраняется между перезагрузками таблицы
+
+async function sbGet(path){
+  const r=await fetch(`${SB_URL}/rest/v1/${path}`,{headers:{
+    'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+  if(!r.ok)throw new Error(`${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+const Nf = n => Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+const Pct = (v,base) => base>0 ? (v/base*100).toFixed(1)+'%' : '—';
+const MONTHS_RU=['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+function setMP(mp){
+  MP=mp;
+  document.getElementById('b-ozon').classList.toggle('on',mp==='ozon');
+  document.getElementById('b-wb').classList.toggle('on',mp==='wb');
+  VIEW==='abc' ? loadABC() : load();
+}
+
+function setPeriod(p){
+  PERIOD=p;
+  document.getElementById('b-month').classList.toggle('on',p==='month');
+  document.getElementById('b-week').classList.toggle('on',p==='week');
+  HIDDEN_PERIODS.clear(); // разное количество/набор периодов у месяцев и недель — сброс
+  load();
+}
+
+function onCountChange(){
+  PERIOD_COUNT=parseInt(document.getElementById('period-count').value)||12;
+  load();
+}
+
+function togglePeriodPanel(){
+  document.getElementById('period-panel').classList.toggle('open');
+}
+
+function periodPanelAll(show){
+  document.querySelectorAll('#period-checks input[type=checkbox]').forEach(cb=>{
+    cb.checked=show;
+    if(show) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
+  });
+  renderTable();
+}
+
+function onPeriodCheck(cb){
+  if(cb.checked) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
+  renderTable();
+}
+
+function setView(v){
+  VIEW=v;
+  document.getElementById('b-view-pl').classList.toggle('on',v==='pl');
+  document.getElementById('b-view-abc').classList.toggle('on',v==='abc');
+  document.getElementById('view-pl').classList.toggle('hidden-view',v!=='pl');
+  document.getElementById('view-abc').classList.toggle('hidden-view',v!=='abc');
+  if(v==='abc' && !document.getElementById('d-from').value) initAbcDates();
+  if(v==='abc') loadABC(); else load();
+}
+
+function initAbcDates(){
+  const now=new Date();
+  const first=new Date(now.getFullYear(), now.getMonth(), 1);
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('d-from').value=iso(first);
+  document.getElementById('d-to').value=iso(now);
+}
+
+function colorModel(sellerArticle){
+  const idx=sellerArticle.lastIndexOf('/');
+  if(idx<0) return sellerArticle;
+  const size=sellerArticle.slice(idx+1).trim();
+  if(size.length<=6) return sellerArticle.slice(0,idx).trim();
+  return sellerArticle;
+}
+
+async function loadABC(){
+  const from=document.getElementById('d-from').value;
+  const to=document.getElementById('d-to').value;
+  const grain=document.getElementById('grain').value;
+  if(!from||!to) return;
+
+  document.getElementById('abc-tbl').innerHTML='<div class="loading">Загрузка…</div>';
+  document.getElementById('abc-summary').innerHTML='';
+  try{
+    const rows=await sbGet(`v_daily_dashboard?marketplace=eq.${MP}&date=gte.${from}&date=lte.${to}&limit=20000`);
+    if(!rows.length){
+      document.getElementById('abc-tbl').innerHTML='<span class="muted">Нет данных за период.</span>';
+      return;
+    }
+    const groupKey = r => grain==='category' ? (r.category||'(без категории)')
+                        : grain==='model'    ? colorModel(r.seller_article)
+                        : r.seller_article;
+    const agg={};
+    for(const r of rows){
+      const key=groupKey(r);
+      if(!agg[key]) agg[key]={
+        name:key, orders:0, buyouts:0, returns:0, revenue:0, cogs:0,
+        commission:0, acquiring:0, logistics:0, spend:0,
+      };
+      const g=agg[key];
+      g.orders   += parseInt(r.orders_qty)||0;
+      g.buyouts  += parseInt(r.buyouts_qty)||0;
+      g.returns  += parseInt(r.returns_qty)||0;
+      g.revenue  += parseFloat(r.ft_rev_day)||0;
+      g.cogs     += (parseFloat(r.cogs)||0) * (parseInt(r.buyouts_qty)||0);
+      g.commission += parseFloat(r.commission_day)||0;
+      g.acquiring  += parseFloat(r.acquiring_day)||0;
+      g.logistics  += parseFloat(r.logistics_day)||0;
+      g.spend      += parseFloat(r.spend)||0;
+    }
+
+    let list=Object.values(agg).filter(g=>g.orders>0||g.buyouts>0||g.revenue>0);
+    list.sort((a,b)=>b.revenue-a.revenue);
+
+    const totalRevenue=list.reduce((s,g)=>s+g.revenue,0);
+    let cum=0;
+    for(const g of list){
+      g.share = totalRevenue>0 ? g.revenue/totalRevenue*100 : 0;
+      cum += g.share;
+      g.cumShare = cum;
+      g.abc = cum<=80 ? 'A' : cum<=95 ? 'B' : 'C';
+      g.grossProfit = g.revenue - g.cogs;
+      g.netProfit = g.grossProfit - g.commission - g.acquiring - g.logistics - g.spend;
+      g.avgCheck = g.buyouts>0 ? g.revenue/g.buyouts : 0;
+      g.buyoutPct = g.orders>0 ? g.buyouts/g.orders*100 : 0;
+    }
+
+    const groups={A:{n:0,rev:0},B:{n:0,rev:0},C:{n:0,rev:0}};
+    for(const g of list){ groups[g.abc].n++; groups[g.abc].rev+=g.revenue; }
+    let sh='';
+    for(const k of ['A','B','C']){
+      sh+=`<div class="sumcard"><div class="v"><span class="badge ${k}">${k}</span> ${groups[k].n}</div><div class="l">${Nf(groups[k].rev)}₽ (${totalRevenue>0?(groups[k].rev/totalRevenue*100).toFixed(1):0}%)</div></div>`;
+    }
+    sh+=`<div class="sumcard"><div class="v">${Nf(totalRevenue)}₽</div><div class="l">Итого выручка</div></div>`;
+    document.getElementById('abc-summary').innerHTML=sh;
+
+    let h='<table><tr>'+
+      '<th>ABC</th><th>Название</th><th>Заказы</th><th>Продажи</th><th>Выкуп %</th>'+
+      '<th>Выручка</th><th>Доля %</th><th>Накоп %</th><th>Ср.чек</th>'+
+      '<th>С/С</th><th>Вал.приб</th><th>Комиссия</th><th>Логистика</th><th>Реклама</th><th>ЧП</th><th>ЧП %</th></tr>';
+    for(const g of list){
+      const npCls = g.netProfit<0?'neg':'pos';
+      h+=`<tr class="group-${g.abc}">`+
+         `<td><span class="badge ${g.abc}">${g.abc}</span></td>`+
+         `<td class="lbl2" title="${g.name}">${g.name}</td>`+
+         `<td>${g.orders}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
+         `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td><td>${g.cumShare.toFixed(1)}%</td>`+
+         `<td>${Nf(g.avgCheck)}₽</td>`+
+         `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
+         `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logistics+g.acquiring)}₽</td><td>${Nf(g.spend)}₽</td>`+
+         `<td class="${npCls}">${Nf(g.netProfit)}₽</td><td class="${npCls}">${g.revenue>0?(g.netProfit/g.revenue*100).toFixed(1):0}%</td>`+
+         `</tr>`;
+    }
+    h+='</table>';
+    document.getElementById('abc-tbl').innerHTML=h;
+  }catch(e){
+    document.getElementById('abc-tbl').innerHTML=`<span class="neg">Ошибка: ${e.message}</span>`;
+  }
+}
+
+function fmtMonth(iso){
+  const d=new Date(iso+'T00:00:00');
+  return `${MONTHS_RU[d.getMonth()+1]} ${d.getFullYear()}`;
+}
+
+function fmtWeek(iso){
+  const start=new Date(iso+'T00:00:00');
+  const end=new Date(start); end.setDate(end.getDate()+6);
+  const p2=n=>String(n).padStart(2,'0');
+  // Номер недели (ISO-ish, совпадает с WEEKNUM(...,2) для большинства недель года)
+  const oneJan=new Date(start.getFullYear(),0,1);
+  const wk=Math.ceil((((start-oneJan)/86400000)+oneJan.getDay()+1)/7);
+  return `Нед.${wk} (${p2(start.getDate())}.${p2(start.getMonth()+1)}–${p2(end.getDate())}.${p2(end.getMonth()+1)})`;
+}
+
+function toggleRows(id){
+  const rows=document.querySelectorAll(`tr[data-parent="${id}"]`);
+  const chev=document.getElementById('chev-'+id);
+  const hidden = rows.length && rows[0].classList.contains('hidden');
+  rows.forEach(r=>r.classList.toggle('hidden', !hidden));
+  if(chev) chev.textContent = hidden ? '▼' : '▶';
+}
+
+// values: массив по месяцам (total). catValues: {category: [значения по месяцам]}
+function metricBlock(label, values, catValues, opts={}){
+  const {pctBase=null, signColor=false, fmt='money'} = opts;
+  const id='m'+(ROW_SEQ++);
+  const fmtCell = v => {
+    if(v===null||v===undefined) return '—';
+    if(fmt==='money') return Nf(v)+'₽';
+    if(fmt==='pct') return v.toFixed(1)+'%';
+    if(fmt==='int') return String(Math.round(v));
+    return String(v);
+  };
+  const cells = values.map((v,i)=>{
+    let cls = signColor && v<0 ? 'neg' : (signColor && v>0 ? 'pos':'');
+    let pctLine = pctBase ? `<span class="pct">${Pct(v,pctBase[i])}</span>` : '';
+    return `<td class="${cls}">${fmtCell(v)}${pctLine}</td>`;
+  }).join('');
+  const hasCat = catValues && Object.keys(catValues).length>0;
+  let h=`<tr class="total"><td class="lbl" onclick="${hasCat?`toggleRows('${id}')`:''}">${hasCat?`<span class="chev" id="chev-${id}">▶</span> `:''}${label}</td>${cells}</tr>`;
+  if(hasCat){
+    for(const [cat, catVals] of Object.entries(catValues)){
+      const catCells = catVals.map((v,i)=>{
+        let pctLine = pctBase ? `<span class="pct">${Pct(v,pctBase[i])}</span>` : '';
+        return `<td>${fmtCell(v)}${pctLine}</td>`;
+      }).join('');
+      h+=`<tr class="cat hidden" data-parent="${id}"><td class="lbl">${cat}</td>${catCells}</tr>`;
+    }
+  }
+  return h;
+}
+
+function sectionRow(label, nCols){
+  return `<tr class="section"><td class="lbl">${label}</td>${'<td></td>'.repeat(nCols)}</tr>`;
+}
+
+let RAW_ROWS=[], RAW_CATROWS=[], RAW_DK='month', RAW_FMT=fmtMonth;
+
+async function load(){
+  document.getElementById('tbl').innerHTML='<div class="loading">Загрузка…</div>';
+  try{
+    const dk = PERIOD==='week' ? 'week' : 'month'; // имя колонки-периода в вьюхе
+    const viewBase = PERIOD==='week' ? 'v_weekly_finance' : 'v_monthly_finance';
+    const fmtPeriod = PERIOD==='week' ? fmtWeek : fmtMonth;
+    const limit = PERIOD==='week' ? 260 : 60;
+    const [rows, catRows] = await Promise.all([
+      sbGet(`${viewBase}?marketplace=eq.${MP}&order=${dk}.asc&limit=${limit}`),
+      sbGet(`${viewBase}_category?marketplace=eq.${MP}&order=${dk}.asc,category.asc&limit=${limit*20}`),
+    ]);
+    RAW_ROWS=rows; RAW_CATROWS=catRows; RAW_DK=dk; RAW_FMT=fmtPeriod;
+    if(!rows.length){
+      document.getElementById('tbl').innerHTML='<span class="muted">Нет данных за период.</span>';
+      document.getElementById('period-checks').innerHTML='';
+      return;
+    }
+
+    // Окно последних N периодов (PERIOD_COUNT), затем панель показать/скрыть
+    const windowRows = PERIOD_COUNT>=9999 ? rows : rows.slice(-PERIOD_COUNT);
+    const panelKeys = windowRows.map(r=>r[dk]);
+    let ph='';
+    for(const k of panelKeys){
+      const checked = !HIDDEN_PERIODS.has(k) ? 'checked' : '';
+      ph+=`<label><input type="checkbox" value="${k}" ${checked} onchange="onPeriodCheck(this)"> ${fmtPeriod(k)}</label>`;
+    }
+    document.getElementById('period-checks').innerHTML=ph;
+
+    renderTable();
+  }catch(e){
+    document.getElementById('tbl').innerHTML=`<span class="neg">Ошибка: ${e.message}</span>`;
+  }
+}
+
+function renderTable(){
+  ROW_SEQ=0;
+  try{
+    const dk=RAW_DK, fmtPeriod=RAW_FMT;
+    const windowRows = PERIOD_COUNT>=9999 ? RAW_ROWS : RAW_ROWS.slice(-PERIOD_COUNT);
+    const rows = windowRows.filter(r=>!HIDDEN_PERIODS.has(r[dk]));
+    if(!rows.length){
+      document.getElementById('tbl').innerHTML='<span class="muted">Все периоды скрыты — включи хотя бы один в «⚙ Периоды».</span>';
+      return;
+    }
+    const visibleKeys = new Set(rows.map(r=>r[dk]));
+    const catRows = RAW_CATROWS.filter(r=>visibleKeys.has(r[dk]));
+
+    const monthKeys = rows.map(r=>r[dk]);
+    const months = monthKeys.map(fmtPeriod);
+    const num = f => rows.map(r=>parseFloat(r[f])||0);
+
+    // ── Категории: сортируем по суммарной выручке за период (крупные — сверху) ──
+    const catNames=[...new Set(catRows.map(r=>r.category))];
+    const catRevTotal={};
+    for(const c of catNames) catRevTotal[c]=catRows.filter(r=>r.category===c).reduce((s,r)=>s+(parseFloat(r.revenue)||0),0);
+    catNames.sort((a,b)=>catRevTotal[b]-catRevTotal[a]);
+
+    const catKey=(cat,field)=>monthKeys.map(m=>{
+      const r=catRows.find(x=>x.category===cat && x[dk]===m);
+      return r ? (parseFloat(r[field])||0) : 0;
+    });
+    const catInt=(cat,field)=>monthKeys.map(m=>{
+      const r=catRows.find(x=>x.category===cat && x[dk]===m);
+      return r ? (parseInt(r[field])||0) : 0;
+    });
+    const byCat = field => { const o={}; for(const c of catNames) o[c]=catKey(c,field); return o; };
+    const byCatInt = field => { const o={}; for(const c of catNames) o[c]=catInt(c,field); return o; };
+
+    const orders   = num('orders_qty'); // used for buyout% below (total)
+    const ordersInt = rows.map(r=>parseInt(r.orders_qty)||0);
+    const buyoutsInt = rows.map(r=>parseInt(r.buyouts_qty)||0);
+    const returnsInt = rows.map(r=>parseInt(r.returns_qty)||0);
+    const revenue  = num('revenue');
+    const cogs     = num('cogs');
+    const m1       = revenue.map((v,i)=>v-cogs[i]);
+    const commission = num('commission_sum');
+    const acquiring   = num('acquiring_sum');
+    const logiTo      = num('logistics_to');
+    const logiFrom     = num('logistics_from');
+    const m2 = m1.map((v,i)=>v-commission[i]-acquiring[i]-logiTo[i]-logiFrom[i]);
+    const adSpend  = num('ad_spend');
+    const selfBuy  = num('self_buy');
+    const bloggers = num('bloggers');
+    const tools    = num('tools');
+    const m3 = m2.map((v,i)=>v-adSpend[i]-selfBuy[i]-bloggers[i]-tools[i]);
+    const otherDed = num('other_deductions');
+    const warehouse = num('warehouse_cost');
+    const finalP = m3.map((v,i)=>v-otherDed[i]-warehouse[i]);
+
+    // ── СПП / чек / выкупаемость (нужны заранее — идут в блок "Объём") ──
+    const buyoutPct = ordersInt.map((o,i)=>o>0?(buyoutsInt[i]/o*100):null);
+    const avgCheckOur = revenue.map((v,i)=>buyoutsInt[i]>0?v/buyoutsInt[i]:null);
+    const revAfterSpp = num('revenue_after_spp');
+    const revMatched   = num('revenue_matched');
+    const qtyMatched    = num('qty_matched');
+    const sppPct = revMatched.map((v,i)=>v>0?(v-revAfterSpp[i])/v*100:null);
+    const avgCheckClient = qtyMatched.map((v,i)=>v>0?revAfterSpp[i]/v:null);
+
+    const catRevAfter = byCat('revenue_after_spp');
+    const catRevMatched = byCat('revenue_matched');
+    const catQtyMatched = byCatInt('qty_matched');
+    const catAvgOur = {}, catAvgClient = {}, catSpp = {};
+    for(const c of catNames){
+      catAvgOur[c] = catKey(c,'revenue').map((v,i)=>catInt(c,'buyouts_qty')[i]>0 ? v/catInt(c,'buyouts_qty')[i] : null);
+      catAvgClient[c] = catQtyMatched[c].map((v,i)=>v>0 ? catRevAfter[c][i]/v : null);
+      catSpp[c] = catRevMatched[c].map((v,i)=>v>0 ? (v-catRevAfter[c][i])/v*100 : null);
+    }
+
+    const nCols=months.length;
+    let h='<table><tr><th>Показатель</th>'+months.map(m=>`<th>${m}</th>`).join('')+'</tr>';
+
+    // ── 1. Объём ──
+    h+=sectionRow('Объём', nCols);
+    h+=metricBlock('Заказы, шт', ordersInt, byCatInt('orders_qty'), {fmt:'int'});
+    h+=metricBlock('Продажи (выкупы), шт', buyoutsInt, byCatInt('buyouts_qty'), {fmt:'int'});
+    h+=`<tr><td class="lbl">Возвраты, шт</td>${returnsInt.map(v=>`<td>${v}</td>`).join('')}</tr>`;
+    h+=`<tr><td class="lbl">Выкупаемость, %</td>${buyoutPct.map(v=>`<td>${v===null?'—':v.toFixed(1)+'%'}</td>`).join('')}</tr>`;
+    h+=metricBlock('Средний чек наш (до СПП), ₽', avgCheckOur, catAvgOur);
+    h+=metricBlock('Средний чек клиента (после СПП), ₽', avgCheckClient, catAvgClient);
+    h+=metricBlock('Средний уровень СПП, %', sppPct, catSpp, {fmt:'pct'});
+    h+=`<tr><td class="lbl" style="font-size:11px;color:var(--text2)">— сопоставлено строк для СПП (шт)</td>${qtyMatched.map(v=>`<td style="font-size:11px;color:var(--text2)">${v||'—'}</td>`).join('')}</tr>`;
+
+    // ── 2. Выручка ──
+    h+=sectionRow('Выручка', nCols);
+    h+=metricBlock('Выручка (до СПП)', revenue, byCat('revenue'));
+    h+=metricBlock('Выручка после СПП', revAfterSpp, byCat('revenue_after_spp'));
+    h+=metricBlock('Себестоимость', cogs, byCat('cogs'));
+    h+=metricBlock('Валовая прибыль (М1)', m1, null, {pctBase:revenue, signColor:true});
+
+    // ── 3. Переменные расходы МП ──
+    h+=sectionRow('Переменные расходы МП', nCols);
+    h+=metricBlock('Комиссия МП', commission, byCat('commission_sum'), {pctBase:revenue});
+    h+=metricBlock('Эквайринг', acquiring, byCat('acquiring_sum'), {pctBase:revenue});
+    h+=metricBlock('Логистика до клиента', logiTo, byCat('logistics_to'), {pctBase:revenue});
+    h+=metricBlock('Логистика от клиента (возвраты)', logiFrom, byCat('logistics_from'), {pctBase:revenue});
+    h+=metricBlock('Маржинальная прибыль (М2)', m2, null, {pctBase:revenue, signColor:true});
+
+    // ── 4. Продвижение ──
+    h+=sectionRow('Продвижение', nCols);
+    h+=metricBlock('Реклама на МП (ДРР)', adSpend, byCat('ad_spend'), {pctBase:revenue});
+    h+=metricBlock('Самовыкупы', selfBuy, null, {pctBase:revenue});
+    h+=metricBlock('Блогеры', bloggers, null, {pctBase:revenue});
+    h+=metricBlock('Инструменты менеджера', tools, null, {pctBase:revenue});
+    h+=metricBlock('Маржинальная прибыль (М3)', m3, null, {pctBase:revenue, signColor:true});
+
+    // ── 5. Прочее ──
+    h+=sectionRow('Прочее', nCols);
+    h+=metricBlock('Прочие расходы МП', otherDed, null, {pctBase:revenue});
+    h+=metricBlock('Склад / поставка (кросс-докинг и т.п.)', warehouse, null, {pctBase:revenue});
+
+    // ── 6. Итог ──
+    h+=sectionRow('Итог', nCols);
+    h+=metricBlock('Прибыль МП', finalP, null, {pctBase:revenue, signColor:true});
+    h+=metricBlock('Чистая прибыль (ЧП)', finalP, null, {pctBase:revenue, signColor:true});
+
+    // ── 7. Запасы ──
+    // Остаток — снэпшот на конец периода (не суммируется по дням, берём как есть из вьюхи).
+    // Оборачиваемость, дн = Остаток / Продажи × дней_в_периоде (30 для месяца, 7 для недели) —
+    // "на сколько дней хватит остатка при текущей скорости продаж".
+    const stockQty = num('stock_qty');
+    const stockValue = num('stock_value');
+    const periodDays = PERIOD==='week' ? 7 : 30;
+    const turnoverDays = stockQty.map((v,i)=>buyoutsInt[i]>0 ? v/buyoutsInt[i]*periodDays : null);
+    const catStockQty = byCat('stock_qty');
+    const catStockValue = byCat('stock_value');
+    const catTurnover = {};
+    for(const c of catNames){
+      catTurnover[c] = catKey(c,'stock_qty').map((v,i)=>catInt(c,'buyouts_qty')[i]>0 ? v/catInt(c,'buyouts_qty')[i]*periodDays : null);
+    }
+
+    h+=sectionRow('Запасы', nCols);
+    h+=metricBlock('Остаток на конец периода, шт', stockQty, catStockQty, {fmt:'int'});
+    h+=metricBlock('Остаток на конец периода, ₽', stockValue, catStockValue);
+    h+=metricBlock('Оборачиваемость, дн', turnoverDays, catTurnover, {fmt:'int'});
+
+    h+='</table>';
+    document.getElementById('tbl').innerHTML=h;
+  }catch(e){
+    document.getElementById('tbl').innerHTML=`<span class="neg">Ошибка: ${e.message}</span>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
