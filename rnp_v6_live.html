@@ -129,6 +129,13 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .pr-pct.nv{background:var(--color-background-danger);color:var(--color-text-danger)}
 .pr-noplan{font-size:9px;color:var(--color-text-tertiary);padding:4px 6px;font-style:italic}
 .dv{font-size:11px;font-weight:500;display:block;line-height:1.1}
+td.all-cell{text-align:left!important;vertical-align:top;padding:2px 4px!important;min-width:96px}
+td.all-cell .pr-wrap{padding:2px 3px;gap:1px}
+td.all-cell .pr-row{font-size:10px;gap:2px}
+td.all-cell .pr-lbl{width:26px;font-size:8px}
+td.all-cell .pr-fact{min-width:0;font-size:10px}
+td.all-cell .pr-pct{font-size:8px;padding:0 3px}
+.dv-empty{color:var(--color-text-tertiary);font-size:11px}
 td.off-day{opacity:.3}
 .h1g{background:rgba(29,158,117,.07)}.h2g{background:rgba(29,158,117,.15)}.h3g{background:rgba(29,158,117,.24)}
 .h1r{background:rgba(226,75,74,.07)}.h2r{background:rgba(226,75,74,.15)}.h3r{background:rgba(226,75,74,.24)}
@@ -233,7 +240,8 @@ tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-
 <div class="kstrip" id="kstrip"></div>
 
 <div class="mrow">
-  <button class="mt on" onclick="sM('orders',this)">Заказы</button>
+  <button class="mt on" onclick="sM('all',this)">Все</button>
+  <button class="mt"    onclick="sM('orders',this)">Заказы</button>
   <button class="mt"    onclick="sM('sales',this)">Продажи</button>
   <button class="mt"    onclick="sM('revenue',this)">Выручка</button>
   <button class="mt"    onclick="sM('profit',this)">ЧП %</button>
@@ -265,7 +273,7 @@ const sb = createClient(
 );
 
 // ─── State ───────────────────────────────────────────────────
-let CMP='wb', CM='orders', CWEEK='all', CYEAR=2026, CMONTH=2;
+let CMP='wb', CM='all', CWEEK='all', CYEAR=2026, CMONTH=2;
 let DATA={wb:null,oz:null};
 const MP_DB={wb:'wb',oz:'ozon'}; // маппинг кнопка -> значение в БД
 
@@ -688,6 +696,29 @@ function fmtV(v,metric){
   if(metric==='sales')return String(v);
   return String(v);
 }
+// Компактный блок со всеми метриками за один день (режим CM==='all')
+// Эквайринг и точная ЧП (с себестоимостью) по дням не разбиты в БД — только за период,
+// поэтому здесь ЧП% = упрощённая формула (выручка−расходы на рекламу)/выручка, как в кнопке "ЧП %".
+function dayAllHTML(o){
+  if(!o||(!o.ord&&!o.sls&&!o.rev))return'<span class="dv-empty">—</span>';
+  const avg=o.sls>0?Nf(o.rev/o.sls)+'₽':null;
+  const drrPct=o.rev>0?(o.spend/o.rev*100).toFixed(1):null;
+  const commPct=o.ftrev>0?(o.comm/o.ftrev*100).toFixed(1):null;
+  const logiPct=o.ftrev>0?(o.logi/o.ftrev*100).toFixed(1):null;
+  const profit=o.rev>0?((o.rev-o.spend)/o.rev*100).toFixed(1):null;
+  const warn='style="background:var(--color-background-warning);color:var(--color-text-warning)"';
+  let h='<div class="pr-wrap day-all">';
+  h+=`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${o.ord||0}</span></div>`;
+  h+=`<div class="pr-row"><span class="pr-lbl">Прод</span><span class="pr-fact">${o.sls||0}</span></div>`;
+  h+=`<div class="pr-row"><span class="pr-lbl">Выр</span><span class="pr-fact">${Nf(o.rev)}₽</span></div>`;
+  if(avg)h+=`<div class="pr-row"><span class="pr-lbl">Чек</span><span class="pr-fact">${avg}</span></div>`;
+  if(profit!==null)h+=`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${profit>=0?'pv':'nv'}">${profit}%</span></div>`;
+  if(o.spend>0)h+=`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(o.spend)}₽</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}%</span>`:''}</div>`;
+  if(o.comm>0)h+=`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${Nf(o.comm)}₽</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}%</span>`:''}</div>`;
+  if(o.logi>0)h+=`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${Nf(o.logi)}₽</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}%</span>`:''}</div>`;
+  h+='</div>';
+  return h;
+}
 function heatCls(v,metric,mn,mx){
   if(v===0)return'';
   const pos=(v-mn)/(mx-mn||1);
@@ -787,7 +818,7 @@ function render(){
   const wkStarts=new Set();
   days.forEach((day,i)=>{if(i>0&&day.wk!==days[i-1].wk)wkStarts.add(i);});
 
-  let html=`<table class="main"><thead><tr>
+  let html=`<table class="main${CM==='all'?' all-mode':''}"><thead><tr>
     <th class="s0" rowspan="2"></th>
     <th class="s1" rowspan="2" style="text-align:left;padding-left:8px">Артикул</th>
     <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">Факт&nbsp;/ план</th>`;
@@ -802,7 +833,7 @@ function render(){
   </tr><tr>`;
   days.forEach((day,i)=>{
     const sep=wkStarts.has(i)?' wk-sep':'';
-    html+=`<th class="day-hdr${sep}" style="min-width:32px">
+    html+=`<th class="day-hdr${sep}" style="min-width:${CM==='all'?'96px':'32px'}">
       <div style="font-size:9px;font-weight:600">${day.d}</div>
       <div style="font-size:9px;opacity:.7">${day.wd}</div>
     </th>`;
@@ -810,6 +841,7 @@ function render(){
   html+=`</tr></thead><tbody>`;
 
   const dayTotals=days.map(()=>0);
+  const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0}));
   cats.forEach((cat,catIdx)=>{
     const arts=displayArts.filter(a=>a.cat===cat);
     const cc=CAT_COLORS[cat]||'#eee';
@@ -826,13 +858,24 @@ function render(){
 
     // Подитоги по категории за каждый день
     // Для %-метрик суммировать нельзя — считаем из сумм ₽
-    const catDayTotals=days.map(day=>{
+    const catDayTotals=CM==='all'?null:days.map(day=>{
       if(CM==='commPct'||CM==='logiPct'){
         const num=arts.reduce((s,art)=>s+getV(art,day,CM==='commPct'?'comm':'logi'),0);
         const den=arts.reduce((s,art)=>{const d=art.days[day.d];return s+(d&&!day.off?d.ftrev:0);},0);
         return den>0?parseFloat((num/den*100).toFixed(1)):0;
       }
       return arts.reduce((s,art)=>s+getV(art,day,CM),0);
+    });
+    // В режиме "Все" — подитог по категории за день это сумма ₽-полей всех артикулов
+    const catDayAll=CM!=='all'?null:days.map(day=>{
+      if(day.off)return null;
+      const o={ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0};
+      for(const art of arts){
+        const d=art.days[day.d];if(!d)continue;
+        o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.spend+=d.spend;
+        o.comm+=d.comm;o.logi+=d.logi;o.ftrev+=d.ftrev;
+      }
+      return o;
     });
     const catFactOrd=days.filter(dv=>!dv.off).reduce((s,day)=>s+arts.reduce((a,art)=>a+getV(art,day,'orders'),0),0);
     const catFactSls=artPre.reduce((s,p)=>s+p.factSls,0);
@@ -884,8 +927,12 @@ function render(){
       </td>`;
     days.forEach((day,di)=>{
       const sep=wkStarts.has(di)?' wk-sep':'';
-      const v=catDayTotals[di];
-      html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
+      if(CM==='all'){
+        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di])}</td>`;
+      }else{
+        const v=catDayTotals[di];
+        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
+      }
     });
     html+=`<td></td><td></td></tr>`;
 
@@ -896,14 +943,22 @@ function render(){
       const pctOrd=art.plan_ord?Math.round(factOrd/art.plan_ord*100):0;
       const pctRev=art.plan_rev?Math.round(factRev/art.plan_rev*100):0;
       const pctSls=art.plan_buy?Math.round(factSls/art.plan_buy*100):0;
-      const dayVals=days.map(day=>getV(art,day,CM));
-      const l5=wdo.slice(-5).map(dv=>getV(art,dv,CM)).filter(v=>v>0);
-      const p5=wdo.slice(-10,-5).map(dv=>getV(art,dv,CM)).filter(v=>v>0);
+      const dayVals=days.map(day=>getV(art,day,CM==='all'?'revenue':CM));
+      const wowMetric=CM==='all'?'revenue':CM;
+      const l5=wdo.slice(-5).map(dv=>getV(art,dv,wowMetric)).filter(v=>v>0);
+      const p5=wdo.slice(-10,-5).map(dv=>getV(art,dv,wowMetric)).filter(v=>v>0);
       const l5a=l5.length?l5.reduce((a,b)=>a+b)/l5.length:0;
       const p5a=p5.length?p5.reduce((a,b)=>a+b)/p5.length:0;
       const wow=p5a?Math.round((l5a-p5a)/p5a*100):0;
       const wowBad=CM==='drr'?wow>0:wow<0;
       dayVals.forEach((v,i)=>{if(!days[i].off)dayTotals[i]+=v;});
+      if(CM==='all'){
+        days.forEach((day,i)=>{
+          const d=art.days[day.d];if(!d||day.off)return;
+          const t=dayTotalsAll[i];
+          t.ord+=d.ord;t.sls+=d.sls;t.rev+=d.rev;t.spend+=d.spend;t.comm+=d.comm;t.logi+=d.logi;t.ftrev+=d.ftrev;
+        });
+      }
 
       // ── Постоянная сводка факт/план (не зависит от выбранного метрика) ──
       function mkPR(lbl, fact, plan, fmt) {
@@ -978,9 +1033,13 @@ function render(){
           style="cursor:pointer;margin-left:4px;opacity:${COMMENTS[art.name]?1:0.35};font-size:11px">💬</span></td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
       days.forEach((day,di)=>{
-        const v=getV(art,day,CM);
         const sep=wkStarts.has(di)?' wk-sep':'';
-        html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+        if(CM==='all'){
+          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(art.days[day.d])}</td>`;
+        }else{
+          const v=getV(art,day,CM);
+          html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+        }
       });
       html+=`<td class="spark-td">${sparkSVG(dayVals,col)}</td>
         <td style="text-align:center"><span style="font-size:10px;padding:1px 4px;border-radius:5px;${wow===0?'color:var(--color-text-tertiary)':wowBad?'background:var(--color-background-danger);color:var(--color-text-danger)':'background:var(--color-background-success);color:var(--color-text-success)'}">${wow===0?'—':(wow>0?'+':'')+wow+'%'}</span></td>
@@ -992,7 +1051,11 @@ function render(){
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td><td class="s2 plan-col"></td>`;
   days.forEach((day,di)=>{
     const sep=wkStarts.has(di)?' wk-sep':'';
-    html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+    if(CM==='all'){
+      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di])}</td>`;
+    }else{
+      html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+    }
   });
   html+=`<td></td><td></td></tr></tbody></table>`;
   document.getElementById('tbl-container').innerHTML=html;
