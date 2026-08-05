@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Тех лист — РНП</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#0f1115;--card:#171a21;--border:#262b36;--text:#e6e9ef;--text2:#9aa3b2;
@@ -30,28 +31,95 @@ tr:last-child td{border-bottom:none}
 .muted{color:var(--text2)}
 a.back{color:var(--accent);text-decoration:none;font-size:12px}
 .loading{color:var(--text2);padding:30px;text-align:center}
+/* ── Login / access gate ──────────────────────────────── */
+#login-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999}
+.lcard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:32px 28px;width:300px}
+.lcard h2{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+.lcard p{font-size:12px;color:var(--text2);margin-bottom:20px}
+.lcard input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;
+  margin-bottom:10px;outline:none;background:var(--bg);color:var(--text);font-family:inherit}
+.lbtn{width:100%;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:6px;
+  font-size:13px;cursor:pointer;font-weight:500;font-family:inherit}
+.lerr{font-size:11px;color:var(--err);margin-top:8px;min-height:16px}
+#denied{padding:40px 0;text-align:center;color:var(--text2)}
 </style>
 </head>
 <body>
-<div class="w">
+<div id="login-overlay">
+  <div class="lcard">
+    <h2>Тех лист — РНП</h2>
+    <p>Войдите чтобы продолжить</p>
+    <input type="email" id="li-email" placeholder="Email" autocomplete="email">
+    <input type="password" id="li-pass" placeholder="Пароль" autocomplete="current-password">
+    <button class="lbtn" onclick="doLogin()">Войти</button>
+    <div class="lerr" id="li-err"></div>
+  </div>
+</div>
+
+<div class="w" id="app" style="display:none">
   <a class="back" href="rnp_v6_live.html">← Дашборд</a>
   <a class="back" href="http://localhost:8792" target="_blank" style="margin-left:14px"
      title="Выдача доступа и импорт файлов (нужен запущенный execution/import_server.py, порт 8792)">
     👤 Выдать доступ
   </a>
+  <a class="back" href="#" onclick="doLogout();return false" style="margin-left:14px">Выйти</a>
   <h1 style="margin-top:8px">🔧 Тех лист</h1>
   <div class="sub">Статус загрузки данных и пропуски. Обновляется при каждом запуске API-скриптов.</div>
 
-  <h2>Пропуски данных (последние 30 дней)</h2>
-  <div class="card" id="gaps"><div class="loading">Загрузка…</div></div>
+  <div id="denied" style="display:none">Доступ ограничен — этот раздел виден только с полным доступом.</div>
 
-  <h2>Журнал синхронизаций (последние 60 записей)</h2>
-  <div class="card" id="log"><div class="loading">Загрузка…</div></div>
+  <div id="content">
+    <h2>Пропуски данных (последние 30 дней)</h2>
+    <div class="card" id="gaps"><div class="loading">Загрузка…</div></div>
+
+    <h2>Журнал синхронизаций (последние 60 записей)</h2>
+    <div class="card" id="log"><div class="loading">Загрузка…</div></div>
+  </div>
 </div>
 
 <script>
 const SB_URL='https://lxmewaxdkjvpkoaoghxp.supabase.co';
 const SB_ANON='sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+
+async function doLogin(){
+  const email=document.getElementById('li-email').value.trim();
+  const pass =document.getElementById('li-pass').value;
+  document.getElementById('li-err').textContent='';
+  const {error}=await sb.auth.signInWithPassword({email,password:pass});
+  if(error)document.getElementById('li-err').textContent=error.message;
+}
+async function doLogout(){await sb.auth.signOut();}
+document.getElementById('li-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+// Роль — из app_metadata (не редактируется юзером самим, только Admin API).
+// Нет роли (старый аккаунт) = admin, чтобы не отрезать уже работавший доступ.
+function gateByRole(session){
+  const role=session?.user?.app_metadata?.role||'admin';
+  const denied=role!=='admin';
+  document.getElementById('denied').style.display=denied?'block':'none';
+  document.getElementById('content').style.display=denied?'none':'block';
+  return !denied;
+}
+
+async function initApp(session){
+  document.getElementById('login-overlay').style.display='none';
+  document.getElementById('app').style.display='block';
+  if(gateByRole(session)){loadLog();loadGaps();}
+}
+
+sb.auth.onAuthStateChange((event,session)=>{
+  if(session){initApp(session);}
+  else{
+    document.getElementById('login-overlay').style.display='flex';
+    document.getElementById('app').style.display='none';
+  }
+});
+(async()=>{
+  const {data:{session}}=await sb.auth.getSession();
+  if(session)await initApp(session);
+})();
 
 async function sbGet(path){
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{headers:{
@@ -147,8 +215,6 @@ async function loadGaps(){
     document.getElementById('gaps').innerHTML=`<span class="err">Ошибка: ${e.message}</span>`;
   }
 }
-
-loadLog();loadGaps();
 </script>
 </body>
 </html>
