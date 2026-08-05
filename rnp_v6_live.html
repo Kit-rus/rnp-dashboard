@@ -191,37 +191,37 @@ tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-
       title="Финансовый отчёт P&L и ABC-анализ">
       📊 Фин. отчёт
     </a>
-    <a href="http://localhost:8792" target="_blank"
+    <a href="http://localhost:8792" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Импорт файлов WB и OZON драг&дропом (нужен запущенный execution/import_server.py, порт 8792)">
       📥 Импорт файлов
     </a>
-    <a href="campaign_map.html" target="_blank"
+    <a href="campaign_map.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Привязка рекламных кампаний к артикулам">
       📎 Кампании
     </a>
-    <a href="article_settings.html" target="_blank"
+    <a href="article_settings.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Управление видимостью артикулов">
       👁️ Видимость
     </a>
-    <a href="plan_editor.html" target="_blank"
+    <a href="plan_editor.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Unit-экономика по артикулам">
       📋 Unit-экономика
     </a>
-    <a href="supply_batches.html" target="_blank"
+    <a href="supply_batches.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Учёт поставок и FIFO-себестоимость">
       🏭 Поставки
     </a>
-    <a href="cost_editor.html" target="_blank"
+    <a href="cost_editor.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Ставки себестоимости по артикулу и периоду">
       💰 Себестоимость
     </a>
-    <a href="tech_status.html" target="_blank"
+    <a href="tech_status.html" target="_blank" class="admin-link"
       style="font-size:11px;color:var(--color-text-tertiary);text-decoration:none;padding:4px 8px;border:1px solid var(--color-border-secondary);border-radius:5px;white-space:nowrap"
       title="Статус загрузки данных и пропуски">
       🔧 Тех лист
@@ -1074,10 +1074,22 @@ function render(){
 }
 
 // ─── Auth listener ────────────────────────────────────────────
+// Роль — из app_metadata (не user_metadata: ту юзер может переписать себе сам
+// через auth.updateUser(), app_metadata — только Admin API/service_role).
+// Нет роли вообще (старые аккаунты, созданные до этой фичи) = admin, чтобы никого
+// не отрезать от уже работавшего доступа задним числом.
+function applyRoleGating(session){
+  const role=session?.user?.app_metadata?.role||'admin';
+  document.querySelectorAll('.admin-link').forEach(el=>{
+    el.style.display=(role==='viewer')?'none':'';
+  });
+}
+
 let _initing=false;
-async function initApp(){
+async function initApp(session){
   if(_initing)return;
   _initing=true;
+  applyRoleGating(session);
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('app').style.display='block';
   try{
@@ -1098,7 +1110,7 @@ async function initApp(){
 
 sb.auth.onAuthStateChange(async(event,session)=>{
   if(session){
-    await initApp();
+    await initApp(session);
   }else{
     document.getElementById('login-overlay').style.display='flex';
     document.getElementById('app').style.display='none';
@@ -1109,7 +1121,7 @@ sb.auth.onAuthStateChange(async(event,session)=>{
 (async()=>{
   const {data:{session}}=await sb.auth.getSession();
   console.log('initial session:', !!session);
-  if(session) await initApp();
+  if(session) await initApp(session);
 })();
 </script>
 </body>
