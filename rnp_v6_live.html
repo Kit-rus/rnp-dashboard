@@ -681,10 +681,12 @@ function getV(art,day,metric){
   if(metric==='clicks') return d.clicks;
   if(metric==='cart')   return d.cart;
   if(metric==='ctr')    return d.shows>0?parseFloat((d.clicks/d.shows*100).toFixed(2)):0;
-  if(metric==='comm')   return d.comm;
-  if(metric==='commPct')return d.ftrev>0?parseFloat((d.comm/d.ftrev*100).toFixed(1)):0;
-  if(metric==='logi')   return d.logi;
-  if(metric==='logiPct')return d.ftrev>0?parseFloat((d.logi/d.ftrev*100).toFixed(1)):0;
+  // Комиссия и логистика привязаны к ПРОДАЖЕ (выкупу), не к заказу — без выкупа в этот
+  // день списаний по факту не было, даже если в d.comm/d.logi что-то попало из файла.
+  if(metric==='comm')   return d.sls>0?d.comm:0;
+  if(metric==='commPct')return d.sls>0&&d.ftrev>0?parseFloat((d.comm/d.ftrev*100).toFixed(1)):0;
+  if(metric==='logi')   return d.sls>0?d.logi:0;
+  if(metric==='logiPct')return d.sls>0&&d.ftrev>0?parseFloat((d.logi/d.ftrev*100).toFixed(1)):0;
   if(metric==='profit') return d.rev>0?parseFloat(((d.rev-d.spend)/d.rev*100).toFixed(1)):0;
   return 0;
 }
@@ -696,28 +698,37 @@ function fmtV(v,metric){
   if(metric==='sales')return String(v);
   return String(v);
 }
-// Компактный блок со всеми метриками за один день (режим CM==='all')
+// Комиссия/логистика день привязаны к продаже (выкупу), а не к заказу —
+// зануляем, если в этот день не было выкупов, даже если d.comm/d.logi ненулевые.
+function gateDay(d){
+  if(!d)return null;
+  const sls=d.sls||0;
+  return{ord:d.ord||0,sls,rev:d.rev||0,spend:d.spend||0,
+    comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,ftrev:d.ftrev||0};
+}
+// Компактный блок со всеми метриками за один день (режим CM==='all').
+// Показываем ВСЕ метрики всегда, без данных — "—" (не скрываем строку).
 // Эквайринг и точная ЧП (с себестоимостью) по дням не разбиты в БД — только за период,
 // поэтому здесь ЧП% = упрощённая формула (выручка−расходы на рекламу)/выручка, как в кнопке "ЧП %".
 function dayAllHTML(o){
-  if(!o||(!o.ord&&!o.sls&&!o.rev))return'<span class="dv-empty">—</span>';
-  const avg=o.sls>0?Nf(o.rev/o.sls)+'₽':null;
-  const drrPct=o.rev>0?(o.spend/o.rev*100).toFixed(1):null;
-  const commPct=o.ftrev>0?(o.comm/o.ftrev*100).toFixed(1):null;
-  const logiPct=o.ftrev>0?(o.logi/o.ftrev*100).toFixed(1):null;
-  const profit=o.rev>0?((o.rev-o.spend)/o.rev*100).toFixed(1):null;
+  const d=o||{};
+  const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,ftrev=d.ftrev||0;
+  const avg=sls>0?Nf(rev/sls)+'₽':'—';
+  const profitPct=rev>0?(rev-spend)/rev*100:null;
+  const drrPct=rev>0&&spend>0?(spend/rev*100).toFixed(1)+'%':null;
+  const commPct=ftrev>0&&comm>0?(comm/ftrev*100).toFixed(1)+'%':null;
+  const logiPct=ftrev>0&&logi>0?(logi/ftrev*100).toFixed(1)+'%':null;
   const warn='style="background:var(--color-background-warning);color:var(--color-text-warning)"';
-  let h='<div class="pr-wrap day-all">';
-  h+=`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${o.ord||0}</span></div>`;
-  h+=`<div class="pr-row"><span class="pr-lbl">Прод</span><span class="pr-fact">${o.sls||0}</span></div>`;
-  h+=`<div class="pr-row"><span class="pr-lbl">Выр</span><span class="pr-fact">${Nf(o.rev)}₽</span></div>`;
-  if(avg)h+=`<div class="pr-row"><span class="pr-lbl">Чек</span><span class="pr-fact">${avg}</span></div>`;
-  if(profit!==null)h+=`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${profit>=0?'pv':'nv'}">${profit}%</span></div>`;
-  if(o.spend>0)h+=`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(o.spend)}₽</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}%</span>`:''}</div>`;
-  if(o.comm>0)h+=`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${Nf(o.comm)}₽</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}%</span>`:''}</div>`;
-  if(o.logi>0)h+=`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${Nf(o.logi)}₽</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}%</span>`:''}</div>`;
-  h+='</div>';
-  return h;
+  return '<div class="pr-wrap day-all">'
+    +`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${Nf(ord)}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Прод</span><span class="pr-fact">${Nf(sls)}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Выр</span><span class="pr-fact">${rev>0?Nf(rev)+'₽':'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Чек</span><span class="pr-fact">${avg}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${profitPct===null?'':profitPct>=0?'pv':'nv'}">${profitPct===null?'—':profitPct.toFixed(1)+'%'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${spend>0?Nf(spend)+'₽':'—'}</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}</span>`:''}</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${comm>0?Nf(comm)+'₽':'—'}</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}</span>`:''}</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${logi>0?Nf(logi)+'₽':'—'}</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}</span>`:''}</div>`
+    +'</div>';
 }
 function heatCls(v,metric,mn,mx){
   if(v===0)return'';
@@ -871,7 +882,7 @@ function render(){
       if(day.off)return null;
       const o={ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0};
       for(const art of arts){
-        const d=art.days[day.d];if(!d)continue;
+        const d=gateDay(art.days[day.d]);if(!d)continue;
         o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.spend+=d.spend;
         o.comm+=d.comm;o.logi+=d.logi;o.ftrev+=d.ftrev;
       }
@@ -954,7 +965,8 @@ function render(){
       dayVals.forEach((v,i)=>{if(!days[i].off)dayTotals[i]+=v;});
       if(CM==='all'){
         days.forEach((day,i)=>{
-          const d=art.days[day.d];if(!d||day.off)return;
+          if(day.off)return;
+          const d=gateDay(art.days[day.d]);if(!d)return;
           const t=dayTotalsAll[i];
           t.ord+=d.ord;t.sls+=d.sls;t.rev+=d.rev;t.spend+=d.spend;t.comm+=d.comm;t.logi+=d.logi;t.ftrev+=d.ftrev;
         });
@@ -1035,7 +1047,7 @@ function render(){
       days.forEach((day,di)=>{
         const sep=wkStarts.has(di)?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(art.days[day.d])}</td>`;
+          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d]))}</td>`;
         }else{
           const v=getV(art,day,CM);
           html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
