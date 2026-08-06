@@ -146,6 +146,42 @@ tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-
 .pv{color:var(--color-text-success)}.nv{color:var(--color-text-danger)}
 @media(max-width:800px){.kstrip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:500px){.kstrip{grid-template-columns:repeat(2,1fr)}}
+
+/* ── Тренд: модалка с настраиваемым графиком по позиции/категории ── */
+td.spark-td,td.trend-cell{cursor:pointer}
+td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondary)!important}
+#trend-modal{position:fixed;inset:0;z-index:998;display:none}
+.trend-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.45)}
+.trend-panel{position:absolute;top:3%;left:50%;transform:translateX(-50%);width:min(960px,94vw);max-height:94vh;
+  overflow-y:auto;background:var(--color-background-primary);border-radius:var(--border-radius-lg);
+  box-shadow:0 12px 40px rgba(0,0,0,0.25);padding:18px 20px}
+.trend-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.trend-title{font-size:15px;font-weight:600;color:var(--color-text-primary)}
+.trend-sub{font-size:11px;color:var(--color-text-tertiary);margin-top:2px}
+.trend-close{font-size:12px;padding:6px 12px;border-radius:8px;border:0.5px solid var(--color-border-secondary);
+  background:var(--color-text-primary);color:var(--color-background-primary);cursor:pointer;white-space:nowrap;font-family:var(--font-sans)}
+.trend-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:10px;padding-bottom:10px;
+  border-bottom:0.5px solid var(--color-border-tertiary)}
+.trend-group{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.trend-group .glbl{font-size:10px;color:var(--color-text-tertiary);margin-right:2px}
+.trend-btn{font-size:11px;padding:4px 10px;border-radius:12px;border:0.5px solid var(--color-border-secondary);
+  background:transparent;cursor:pointer;color:var(--color-text-secondary);white-space:nowrap;font-family:var(--font-sans)}
+.trend-btn.on{background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)}
+.trend-custom input[type=date]{font-size:11px;padding:3px 6px;border-radius:6px;border:0.5px solid var(--color-border-secondary);
+  background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)}
+.trend-metrics{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}
+.trend-chart-wrap{position:relative;width:100%}
+.trend-chart-wrap svg{width:100%;height:280px;display:block;overflow:visible}
+.trend-tooltip{position:absolute;pointer-events:none;background:var(--color-background-primary);
+  border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:8px 10px;font-size:11px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.18);white-space:nowrap;z-index:5}
+.trend-tooltip .tt-date{font-weight:600;color:var(--color-text-primary);margin-bottom:4px}
+.trend-tooltip .tt-row{display:flex;justify-content:space-between;gap:14px;color:var(--color-text-secondary)}
+.trend-tooltip .tt-row b{color:var(--color-text-primary);font-weight:600}
+.trend-summary{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:0.5px solid var(--color-border-tertiary)}
+.trend-sum-item{font-size:11px;color:var(--color-text-tertiary)}
+.trend-sum-item b{display:block;font-size:14px;color:var(--color-text-primary);font-weight:600;margin-top:2px}
+.trend-empty{padding:40px 0;text-align:center;color:var(--color-text-tertiary);font-size:12px}
 </style>
 </head>
 <body>
@@ -262,6 +298,38 @@ tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-
 </div>
 
 </div>
+</div>
+
+<div id="trend-modal">
+  <div class="trend-backdrop" onclick="closeTrend()"></div>
+  <div class="trend-panel">
+    <div class="trend-header">
+      <div>
+        <div class="trend-title" id="trend-title">—</div>
+        <div class="trend-sub" id="trend-sub"></div>
+      </div>
+      <button class="trend-close" onclick="closeTrend()" title="Esc — тоже закрывает">✕ Вернуться в РНП</button>
+    </div>
+    <div class="trend-controls">
+      <div class="trend-group" id="trend-period-group">
+        <span class="glbl">Период:</span>
+      </div>
+      <div class="trend-group trend-custom" id="trend-custom-group" style="display:none">
+        <input type="date" id="trend-date-from" onchange="onTrendCustomDate()">
+        <span class="glbl">—</span>
+        <input type="date" id="trend-date-to" onchange="onTrendCustomDate()">
+      </div>
+      <div class="trend-group" id="trend-gran-group">
+        <span class="glbl">Разбивка:</span>
+      </div>
+    </div>
+    <div class="trend-metrics" id="trend-metric-group"></div>
+    <div class="trend-chart-wrap">
+      <svg id="trend-svg" viewBox="0 0 900 280" preserveAspectRatio="none"></svg>
+      <div class="trend-tooltip" id="trend-tooltip"></div>
+    </div>
+    <div class="trend-summary" id="trend-summary"></div>
+  </div>
 </div>
 
 <script>
@@ -782,6 +850,224 @@ function sparkSVG(vals,color,w=48,h=20){
   </svg>`;
 }
 
+// ─── Тренд: модалка с графиком по артикулу/категории ──────────
+let TREND=null; // {mp, sellerArticle, category, isCategory, dateFrom, dateTo, period, granularity, metric, rawRows, buckets}
+
+const TREND_METRICS=[
+  {key:'revenue', label:'Выручка',  pct:false, get:b=>b.rev,
+    tip:b=>[['Продажи',b.sls],['Заказы',b.ord],['Ср. чек',b.sls>0?Nf(b.rev/b.sls)+'₽':'—'],['Выкупаемость',b.ord>0?(b.sls/b.ord*100).toFixed(1)+'%':'—']]},
+  {key:'orders',  label:'Заказы',   pct:false, get:b=>b.ord,
+    tip:b=>[['Продажи',b.sls],['Выкупаемость',b.ord>0?(b.sls/b.ord*100).toFixed(1)+'%':'—'],['Показы',Fk(b.shows)],['Клики',Fk(b.clicks)]]},
+  {key:'sales',   label:'Продажи',  pct:false, get:b=>b.sls,
+    tip:b=>[['Заказы',b.ord],['Выручка',Nf(b.rev)+'₽'],['Ср. чек',b.sls>0?Nf(b.rev/b.sls)+'₽':'—']]},
+  {key:'avgcheck',label:'Ср. чек',  pct:false, get:b=>b.sls>0?b.rev/b.sls:0,
+    tip:b=>[['Продажи',b.sls],['Выручка',Nf(b.rev)+'₽']]},
+  {key:'profit',  label:'ЧП %',     pct:true,  get:b=>{const c=trendCogs(b);return (b.rev>0&&c>0)?(b.rev-c-b.spend-b.comm-b.logi-b.acq)/b.rev*100:null;},
+    tip:b=>{const c=trendCogs(b);const np=(b.rev>0&&c>0)?b.rev-c-b.spend-b.comm-b.logi-b.acq:null;
+      return[['ЧП, ₽',np!==null?Nf(np)+'₽':'—'],['Выручка',Nf(b.rev)+'₽'],['Себестоимость',c>0?Nf(c)+'₽':'—'],['Комиссия+Лог.+Экв.',Nf(b.comm+b.logi+b.acq)+'₽'],['ДРР',Nf(b.spend)+'₽']];}},
+  {key:'drr',     label:'ДРР %',    pct:true,  get:b=>b.rev>0?b.spend/b.rev*100:0,
+    tip:b=>[['Расход',Nf(b.spend)+'₽'],['Выручка',Nf(b.rev)+'₽'],['Показы',Fk(b.shows)],['Клики',Fk(b.clicks)],['CTR',b.shows>0?(b.clicks/b.shows*100).toFixed(2)+'%':'—']]},
+  {key:'comm',    label:'Комиссия', pct:false, get:b=>b.comm,
+    tip:b=>[['% от выручки',b.ftrev>0?(b.comm/b.ftrev*100).toFixed(1)+'%':'—'],['Наша выручка (МП)',Nf(b.ftrev)+'₽']]},
+  {key:'acq',     label:'Эквайринг',pct:false, get:b=>b.acq,
+    tip:b=>[['% от выручки',b.ftrev>0?(b.acq/b.ftrev*100).toFixed(1)+'%':'—'],['Наша выручка (МП)',Nf(b.ftrev)+'₽']]},
+  {key:'logi',    label:'Логистика',pct:false, get:b=>b.logi,
+    tip:b=>[['% от выручки',b.ftrev>0?(b.logi/b.ftrev*100).toFixed(1)+'%':'—'],['Наша выручка (МП)',Nf(b.ftrev)+'₽']]},
+];
+function trendCogs(b){return b.cogsSum||0;}
+function trendFmt(v,pct){if(v===null||v===undefined)return'—';return pct?v.toFixed(1)+'%':(Number.isInteger(v)?Nf(v):Nf(Math.round(v)))+(pct?'':'');}
+
+async function openTrend(mp,sellerArticle,category,isCategory){
+  const to=new Date();
+  const from=new Date();from.setDate(from.getDate()-29);
+  TREND={
+    mp, sellerArticle, category, isCategory,
+    dateFrom:from.toISOString().slice(0,10), dateTo:to.toISOString().slice(0,10),
+    period:30, granularity:'day', metric:'revenue', rawRows:[], buckets:[],
+  };
+  document.getElementById('trend-title').textContent=isCategory?`📁 ${category}`:sellerArticle;
+  document.getElementById('trend-modal').style.display='block';
+  renderTrendControls();
+  await loadTrendData();
+  renderTrendChart();
+}
+function closeTrend(){
+  document.getElementById('trend-modal').style.display='none';
+  document.getElementById('trend-tooltip').style.display='none';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&TREND)closeTrend();});
+
+function renderTrendControls(){
+  const periods=[[7,'7д'],[30,'30д'],[90,'90д'],['custom','Свой период']];
+  document.getElementById('trend-period-group').innerHTML='<span class="glbl">Период:</span>'+periods.map(([v,l])=>
+    `<button class="trend-btn${TREND.period===v?' on':''}" onclick="setTrendPeriod('${v}')">${l}</button>`).join('');
+  document.getElementById('trend-custom-group').style.display=TREND.period==='custom'?'flex':'none';
+  document.getElementById('trend-date-from').value=TREND.dateFrom;
+  document.getElementById('trend-date-to').value=TREND.dateTo;
+  const grans=[['day','По дням'],['week','По неделям'],['month','По месяцам']];
+  document.getElementById('trend-gran-group').innerHTML='<span class="glbl">Разбивка:</span>'+grans.map(([v,l])=>
+    `<button class="trend-btn${TREND.granularity===v?' on':''}" onclick="setTrendGranularity('${v}')">${l}</button>`).join('');
+  document.getElementById('trend-metric-group').innerHTML=TREND_METRICS.map(m=>
+    `<button class="trend-btn${TREND.metric===m.key?' on':''}" onclick="setTrendMetric('${m.key}')">${m.label}</button>`).join('');
+}
+async function setTrendPeriod(v){
+  if(v==='custom'){TREND.period='custom';renderTrendControls();return;}
+  const days=parseInt(v);
+  const to=new Date();const from=new Date();from.setDate(from.getDate()-(days-1));
+  TREND.period=days;TREND.dateFrom=from.toISOString().slice(0,10);TREND.dateTo=to.toISOString().slice(0,10);
+  renderTrendControls();
+  await loadTrendData();renderTrendChart();
+}
+async function onTrendCustomDate(){
+  const f=document.getElementById('trend-date-from').value;
+  const t=document.getElementById('trend-date-to').value;
+  if(!f||!t||f>t)return;
+  TREND.dateFrom=f;TREND.dateTo=t;TREND.period='custom';
+  await loadTrendData();renderTrendChart();
+}
+function setTrendGranularity(g){TREND.granularity=g;renderTrendControls();buildTrendBuckets();renderTrendChart();}
+function setTrendMetric(m){TREND.metric=m;renderTrendControls();renderTrendChart();}
+
+async function loadTrendData(){
+  const mp_db=MP_DB[TREND.mp]||TREND.mp;
+  const filter=TREND.isCategory
+    ?`category=eq.${encodeURIComponent(TREND.category)}`
+    :`seller_article=eq.${encodeURIComponent(TREND.sellerArticle)}`;
+  const cols='date,orders_qty,buyouts_qty,buyouts_sum,spend,shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
+  const baseUrl=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&${filter}&date=gte.${TREND.dateFrom}&date=lte.${TREND.dateTo}&select=${cols}&order=date`;
+  const pageSize=1000;let all=[];let offset=0;
+  while(true){
+    const r=await fetch(`${baseUrl}&limit=${pageSize}&offset=${offset}`,{headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});
+    if(!r.ok)break;
+    const batch=await r.json();
+    all=all.concat(batch);
+    if(batch.length<pageSize)break;
+    offset+=pageSize;
+  }
+  TREND.rawRows=all;
+  buildTrendBuckets();
+}
+
+function buildTrendBuckets(){
+  const byDate={};
+  for(const r of TREND.rawRows){
+    const d=r.date;
+    if(!byDate[d])byDate[d]={date:d,ord:0,sls:0,rev:0,spend:0,shows:0,clicks:0,comm:0,logi:0,acq:0,ftrev:0,cogsSum:0};
+    const o=byDate[d];
+    o.ord+=r.orders_qty||0;
+    o.sls+=r.buyouts_qty||0;
+    o.rev+=parseFloat(r.buyouts_sum)||0;
+    o.spend+=parseFloat(r.spend)||0;
+    o.shows+=r.shows||0;
+    o.clicks+=r.clicks||0;
+    // Комиссия/логистика/эквайринг привязаны к продаже — тот же принцип, что в основной таблице
+    if((r.buyouts_qty||0)>0){
+      o.comm+=parseFloat(r.commission_day)||0;
+      o.logi+=parseFloat(r.logistics_day)||0;
+      o.acq+=parseFloat(r.acquiring_day)||0;
+    }
+    o.ftrev+=parseFloat(r.ft_rev_day)||0;
+    o.cogsSum+=(parseFloat(r.cogs)||0)*(r.buyouts_qty||0);
+  }
+  const dates=Object.keys(byDate).sort();
+  const g=TREND.granularity;
+  if(g==='day'){
+    TREND.buckets=dates.map(d=>({key:d,label:d.slice(5).replace('-','.'),...byDate[d]}));
+    return;
+  }
+  const groups={};
+  for(const d of dates){
+    const dt=new Date(d+'T00:00:00');
+    let key,label;
+    if(g==='week'){
+      const monday=new Date(dt);monday.setDate(dt.getDate()-((dt.getDay()+6)%7));
+      key=monday.toISOString().slice(0,10);
+      label='нед '+key.slice(5).replace('-','.');
+    }else{
+      key=d.slice(0,7);
+      label=MONTHS_RU[dt.getMonth()+1].slice(0,3)+' '+key.slice(0,4).slice(2);
+    }
+    if(!groups[key])groups[key]={key,label,ord:0,sls:0,rev:0,spend:0,shows:0,clicks:0,comm:0,logi:0,acq:0,ftrev:0,cogsSum:0};
+    const src=byDate[d],dst=groups[key];
+    for(const f of['ord','sls','rev','spend','shows','clicks','comm','logi','acq','ftrev','cogsSum'])dst[f]+=src[f];
+  }
+  TREND.buckets=Object.keys(groups).sort().map(k=>groups[k]);
+}
+
+function renderTrendChart(){
+  const svg=document.getElementById('trend-svg');
+  const metric=TREND_METRICS.find(m=>m.key===TREND.metric);
+  const buckets=TREND.buckets;
+  if(!buckets.length){
+    svg.innerHTML='';
+    document.getElementById('trend-summary').innerHTML='<div class="trend-empty">Нет данных за выбранный период</div>';
+    return;
+  }
+  const W=900,H=280,padL=44,padR=12,padT=14,padB=28;
+  const vals=buckets.map(b=>metric.get(b)).map(v=>v===null?0:v);
+  const nz=vals.filter((v,i)=>metric.get(buckets[i])!==null);
+  const mn=Math.min(0,...nz),mx=Math.max(1,...nz);
+  const rng=(mx-mn)||1;
+  const x=i=>padL+(buckets.length>1?i/(buckets.length-1)*(W-padL-padR):(W-padL-padR)/2);
+  const y=v=>H-padB-((v-mn)/rng)*(H-padT-padB);
+  const pts=buckets.map((b,i)=>({x:x(i),y:y(metric.get(b)===null?mn:metric.get(b)),b,i,has:metric.get(b)!==null}));
+  let path='';
+  pts.forEach((p,i)=>{if(!p.has)return;path+=(path?'L':'M')+p.x.toFixed(1)+','+p.y.toFixed(1);});
+  // Сетка + подписи оси Y (3 линии)
+  let grid='';
+  for(let k=0;k<=2;k++){
+    const v=mn+rng*k/2;
+    const gy=y(v);
+    grid+=`<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="var(--color-border-tertiary)" stroke-width="1"/>`;
+    grid+=`<text x="${padL-6}" y="${gy+3}" font-size="9" text-anchor="end" fill="var(--color-text-tertiary)">${metric.pct?v.toFixed(0)+'%':Fk(v)}</text>`;
+  }
+  // Подписи оси X — не все, чтобы не налезали
+  const step=Math.ceil(buckets.length/10)||1;
+  let xlabels='';
+  buckets.forEach((b,i)=>{
+    if(i%step!==0&&i!==buckets.length-1)return;
+    xlabels+=`<text x="${x(i)}" y="${H-8}" font-size="9" text-anchor="middle" fill="var(--color-text-tertiary)">${b.label}</text>`;
+  });
+  const color='var(--color-text-primary)';
+  const circles=pts.filter(p=>p.has).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${color}"/>`).join('');
+  svg.innerHTML=`${grid}${xlabels}<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>${circles}
+    <rect id="trend-hitzone" x="${padL}" y="0" width="${W-padL-padR}" height="${H}" fill="transparent"/>`;
+
+  const hit=document.getElementById('trend-hitzone');
+  const wrap=svg.parentElement;
+  const tooltip=document.getElementById('trend-tooltip');
+  function showTip(evt){
+    const rect=svg.getBoundingClientRect();
+    const svgX=(evt.clientX-rect.left)/rect.width*W;
+    let nearest=0,best=Infinity;
+    pts.forEach((p,i)=>{const d=Math.abs(p.x-svgX);if(d<best){best=d;nearest=i;}});
+    const b=buckets[nearest];
+    const rows=metric.tip(b).map(([l,v])=>`<div class="tt-row"><span>${l}</span><b>${v}</b></div>`).join('');
+    const val=metric.get(b);
+    const unit=metric.pct?'':(metric.key==='orders'||metric.key==='sales'?'':'₽');
+    tooltip.innerHTML=`<div class="tt-date">${b.label} — ${metric.label}: <b>${trendFmt(val,metric.pct)}${unit}</b></div>${rows}`;
+    tooltip.style.display='block';
+    const wrapRect=wrap.getBoundingClientRect();
+    let left=evt.clientX-wrapRect.left+12;
+    if(left+220>wrapRect.width)left=evt.clientX-wrapRect.left-232;
+    tooltip.style.left=Math.max(0,left)+'px';
+    tooltip.style.top=(evt.clientY-wrapRect.top-40)+'px';
+  }
+  hit.addEventListener('mousemove',showTip);
+  hit.addEventListener('mouseleave',()=>{tooltip.style.display='none';});
+
+  // Summary
+  const sumVal=buckets.reduce((s,b)=>{const v=metric.get(b);return s+(v===null?0:v);},0);
+  const avgVal=sumVal/buckets.length;
+  let bestB=buckets[0],bestV=-Infinity;
+  buckets.forEach(b=>{const v=metric.get(b);if(v!==null&&v>bestV){bestV=v;bestB=b;}});
+  const isSummable=!metric.pct;
+  document.getElementById('trend-summary').innerHTML=`
+    ${isSummable?`<div class="trend-sum-item">Итого за период<b>${trendFmt(sumVal,false)}${metric.pct?'':(metric.key==='orders'||metric.key==='sales'?'':'₽')}</b></div>`:''}
+    <div class="trend-sum-item">Среднее за ${TREND.granularity==='day'?'день':TREND.granularity==='week'?'неделю':'месяц'}<b>${trendFmt(avgVal,metric.pct)}${metric.pct?'':(metric.key==='orders'||metric.key==='sales'?'':'₽')}</b></div>
+    <div class="trend-sum-item">Лучший период<b>${bestB.label}: ${trendFmt(bestV,metric.pct)}${metric.pct?'':(metric.key==='orders'||metric.key==='sales'?'':'₽')}</b></div>`;
+}
+
 // ─── Render ───────────────────────────────────────────────────
 function renderKPI(){
   const d=DATA[CMP];if(!d)return;
@@ -982,7 +1268,8 @@ function render(){
         html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
       }
     });
-    html+=`<td></td><td></td></tr>`;
+    html+=`<td class="trend-cell" title="Открыть график по категории"
+      onclick="event.stopPropagation();openTrend('${MP_DB[CMP]||CMP}',null,'${cat.replace(/'/g,"\\'")}',true)">📈</td><td></td></tr>`;
 
     artPre.forEach(({art,factSls,factRev,factSpend,factComm,factAcq,factLogi,factGross})=>{
       const factOrd=wdo.reduce((a,day)=>a+getV(art,day,'orders'),0);
@@ -1093,7 +1380,8 @@ function render(){
           html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
         }
       });
-      html+=`<td class="spark-td">${sparkSVG(dayVals,col)}</td>
+      html+=`<td class="spark-td" title="Открыть график"
+        onclick="openTrend('${MP_DB[CMP]||CMP}','${art.name.replace(/'/g,"\\'")}',null,false)">${sparkSVG(dayVals,col)}</td>
         <td style="text-align:center"><span style="font-size:10px;padding:1px 4px;border-radius:5px;${wow===0?'color:var(--color-text-tertiary)':wowBad?'background:var(--color-background-danger);color:var(--color-text-danger)':'background:var(--color-background-success);color:var(--color-text-success)'}">${wow===0?'—':(wow>0?'+':'')+wow+'%'}</span></td>
       </tr>`;
     });
