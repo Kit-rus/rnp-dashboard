@@ -708,13 +708,24 @@ function gateDay(d){
 }
 // Компактный блок со всеми метриками за один день (режим CM==='all').
 // Показываем ВСЕ метрики всегда, без данных — "—" (не скрываем строку).
-// Эквайринг и точная ЧП (с себестоимостью) по дням не разбиты в БД — только за период,
-// поэтому здесь ЧП% = упрощённая формула (выручка−расходы на рекламу)/выручка, как в кнопке "ЧП %".
-function dayAllHTML(o){
+// ЧП = выручка − себестоимость − реклама − комиссия − логистика − эквайринг, как в карточке
+// факт/план. Комиссия/логистика по дню точные (см. gateDay), себестоимость и эквайринг по дням
+// в БД не разбиты — прорейтируем их от периода/категории пропорционально доле выручки дня
+// (npCtx: cogsTotal/acqTotal/grossTotal за период). Без npCtx (или без cogs) — ЧП "—", а не
+// фейковые 100% от (выручка−реклама)/выручка, как было раньше (нашли на реальном кейсе:
+// день без рекламы показывал ЧП 100% при реальной марже ~10-20%).
+function dayAllHTML(o, npCtx){
   const d=o||{};
   const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,ftrev=d.ftrev||0;
   const avg=sls>0?Nf(rev/sls)+'₽':'—';
-  const profitPct=rev>0?(rev-spend)/rev*100:null;
+  let profitPct=null;
+  if(rev>0&&npCtx&&npCtx.cogsTotal>0&&npCtx.grossTotal>0){
+    const share=Math.min(rev/npCtx.grossTotal,1);
+    const dayCogs=npCtx.cogsTotal*share;
+    const dayAcq =(npCtx.acqTotal||0)*share;
+    const np=rev-dayCogs-spend-comm-logi-dayAcq;
+    profitPct=np/rev*100;
+  }
   const drrPct=rev>0&&spend>0?(spend/rev*100).toFixed(1)+'%':null;
   const commPct=ftrev>0&&comm>0?(comm/ftrev*100).toFixed(1)+'%':null;
   const logiPct=ftrev>0&&logi>0?(logi/ftrev*100).toFixed(1)+'%':null;
@@ -853,6 +864,7 @@ function render(){
 
   const dayTotals=days.map(()=>0);
   const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0}));
+  let grandCogs=0,grandAcq=0,grandGross=0; // для ЧП в строке "Итого" (режим "Все")
   cats.forEach((cat,catIdx)=>{
     const arts=displayArts.filter(a=>a.cat===cat);
     const cc=CAT_COLORS[cat]||'#eee';
@@ -906,6 +918,7 @@ function render(){
       catNp=catFactRev-catCogsTotal-catFactSpend-(catComm+catAcq+catLogi)*ratio;
     }
     const catNpPct=catNp!==null&&catFactRev>0?(catNp/catFactRev*100).toFixed(1):null;
+    grandCogs+=catCogsTotal;grandAcq+=catAcq;grandGross+=catGross;
 
     // Взвешенное среднее commission_pct по сумме комиссии
     const _cpArts=arts.filter(a=>a.commission_pct>0&&a.commission_sum>0);
@@ -939,7 +952,8 @@ function render(){
     days.forEach((day,di)=>{
       const sep=wkStarts.has(di)?' wk-sep':'';
       if(CM==='all'){
-        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di])}</td>`;
+        const catNpCtx={cogsTotal:catCogsTotal,acqTotal:catAcq,grossTotal:catGross};
+        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di],catNpCtx)}</td>`;
       }else{
         const v=catDayTotals[di];
         html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
@@ -1047,7 +1061,8 @@ function render(){
       days.forEach((day,di)=>{
         const sep=wkStarts.has(di)?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d]))}</td>`;
+          const artNpCtx={cogsTotal:art.cogs*factSls,acqTotal:acq,grossTotal:gross};
+          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d]),artNpCtx)}</td>`;
         }else{
           const v=getV(art,day,CM);
           html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
@@ -1059,12 +1074,13 @@ function render(){
     });
   });
 
+  const grandNpCtx={cogsTotal:grandCogs,acqTotal:grandAcq,grossTotal:grandGross};
   html+=`<tr class="total-row">
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td><td class="s2 plan-col"></td>`;
   days.forEach((day,di)=>{
     const sep=wkStarts.has(di)?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di])}</td>`;
+      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di],grandNpCtx)}</td>`;
     }else{
       html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
     }
