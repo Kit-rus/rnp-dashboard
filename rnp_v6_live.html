@@ -804,22 +804,24 @@ function dayAllHTML(o){
   const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
         acq=d.acq||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
   const avg=sls>0?Nf(rev/sls)+'₽':'—';
-  let profitPct=null;
+  let np=null,profitPct=null;
   if(rev>0&&cogs>0){
-    const np=rev-cogs-spend-comm-logi-acq;
+    np=rev-cogs-spend-comm-logi-acq;
     profitPct=np/rev*100;
   }
   const drrPct=rev>0&&spend>0?(spend/rev*100).toFixed(1)+'%':null;
   const commPct=ftrev>0&&comm>0?(comm/ftrev*100).toFixed(1)+'%':null;
   const logiPct=ftrev>0&&logi>0?(logi/ftrev*100).toFixed(1)+'%':null;
   const acqPct=ftrev>0&&acq>0?(acq/ftrev*100).toFixed(1)+'%':null;
+  const npCls=profitPct===null?'':profitPct>=0?'pv':'nv';
+  const npPctBadge=profitPct===null?'':`<span class="pr-pct ${npCls}" style="background:${profitPct>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${profitPct>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${profitPct.toFixed(1)}%</span>`;
   const warn='style="background:var(--color-background-warning);color:var(--color-text-warning)"';
   return '<div class="pr-wrap day-all">'
     +`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${Nf(ord)}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Прод</span><span class="pr-fact">${Nf(sls)}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Выр</span><span class="pr-fact">${rev>0?Nf(rev)+'₽':'—'}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Чек</span><span class="pr-fact">${avg}</span></div>`
-    +`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${profitPct===null?'':profitPct>=0?'pv':'nv'}">${profitPct===null?'—':profitPct.toFixed(1)+'%'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${np===null?'—':Nf(np)+'₽'}</span>${npPctBadge}</div>`
     +`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${spend>0?Nf(spend)+'₽':'—'}</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${comm>0?Nf(comm)+'₽':'—'}</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Экв</span><span class="pr-fact">${acq>0?Nf(acq)+'₽':'—'}</span>${acqPct?`<span class="pr-pct" ${warn}>${acqPct}</span>`:''}</div>`
