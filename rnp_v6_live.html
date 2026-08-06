@@ -515,6 +515,7 @@ function buildArticles(rows){
       ctr:parseFloat(r.ctr)||0,
       comm:parseFloat(r.commission_day)||0,
       logi:parseFloat(r.logistics_day)||0,
+      acq:parseFloat(r.acquiring_day)||0,
       ftrev:parseFloat(r.ft_rev_day)||0,
       profit:0,
     };
@@ -687,48 +688,63 @@ function getV(art,day,metric){
   if(metric==='commPct')return d.sls>0&&d.ftrev>0?parseFloat((d.comm/d.ftrev*100).toFixed(1)):0;
   if(metric==='logi')   return d.sls>0?d.logi:0;
   if(metric==='logiPct')return d.sls>0&&d.ftrev>0?parseFloat((d.logi/d.ftrev*100).toFixed(1)):0;
-  if(metric==='profit') return d.rev>0?parseFloat(((d.rev-d.spend)/d.rev*100).toFixed(1)):0;
+  // Эквайринг — тот же принцип, что комиссия/логистика: привязан к продаже, не к заказу.
+  if(metric==='acq')    return d.sls>0?(d.acq||0):0;
+  // ЧП% дня = полная формула (выручка−себестоимость−реклама−комиссия−логистика−эквайринг)/выручка,
+  // НЕ упрощённая (выручка−реклама)/выручка — та давала фейковые 100% в дни без рекламы
+  // (нашли на реальном кейсе: манишка, 0 руб. рекламы в тот день -> старая формула = 100%).
+  // Себестоимость точная: art.cogs (₽/шт, из article_costs) × d.sls (точное число продаж дня).
+  if(metric==='profit'){
+    if(!(d.rev>0)||!(art.cogs>0))return 0;
+    const cogs=art.cogs*d.sls;
+    const platform=d.sls>0?(d.comm+d.logi+(d.acq||0)):0;
+    const np=d.rev-cogs-d.spend-platform;
+    return parseFloat((np/d.rev*100).toFixed(1));
+  }
   return 0;
 }
 function fmtV(v,metric){
   if(v===0)return'—';
   if(metric==='drr'||metric==='ctr'||metric==='profit'||metric==='commPct'||metric==='logiPct')return v.toFixed(1)+'%';
-  if(metric==='revenue'||metric==='spend'||metric==='comm'||metric==='logi')return Nf(v)+'₽';
+  if(metric==='revenue'||metric==='spend'||metric==='comm'||metric==='logi'||metric==='acq')return Nf(v)+'₽';
   if(metric==='shows')return Fk(v);
   if(metric==='sales')return String(v);
   return String(v);
 }
-// Комиссия/логистика день привязаны к продаже (выкупу), а не к заказу —
-// зануляем, если в этот день не было выкупов, даже если d.comm/d.logi ненулевые.
-function gateDay(d){
+// Комиссия/логистика/эквайринг день привязаны к продаже (выкупу), а не к заказу —
+// зануляем, если в этот день не было выкупов. cogsPerUnit (art.cogs, ₽/шт) даёт ТОЧНУЮ
+// себестоимость дня = cogsPerUnit×sls — без прорейтинга по доле выручки (раньше прорейтинг
+// от месячного ft_gross_rev при выбранной неделе или из-за расхождения по срокам между
+// financial_transactions и daily_metrics давал заниженную себестоимость и фейковые ~100% ЧП).
+function gateDay(d,cogsPerUnit){
   if(!d)return null;
   const sls=d.sls||0;
   return{ord:d.ord||0,sls,rev:d.rev||0,spend:d.spend||0,
-    comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,ftrev:d.ftrev||0};
+    comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,acq:sls>0?(d.acq||0):0,
+    cogs:(cogsPerUnit>0)?cogsPerUnit*sls:0,
+    ftrev:d.ftrev||0};
 }
 // Компактный блок со всеми метриками за один день (режим CM==='all').
 // Показываем ВСЕ метрики всегда, без данных — "—" (не скрываем строку).
-// ЧП = выручка − себестоимость − реклама − комиссия − логистика − эквайринг, как в карточке
-// факт/план. Комиссия/логистика по дню точные (см. gateDay), себестоимость и эквайринг по дням
-// в БД не разбиты — прорейтируем их от периода/категории пропорционально доле выручки дня
-// (npCtx: cogsTotal/acqTotal/grossTotal за период). Без npCtx (или без cogs) — ЧП "—", а не
-// фейковые 100% от (выручка−реклама)/выручка, как было раньше (нашли на реальном кейсе:
-// день без рекламы показывал ЧП 100% при реальной марже ~10-20%).
-function dayAllHTML(o, npCtx){
+// ЧП = выручка − себестоимость − реклама − комиссия − логистика − эквайринг — все точные
+// по дню (o.cogs/o.acq/o.comm/o.logi уже посчитаны вызывающим кодом на основе gateDay,
+// без прорейтинга). Без себестоимости (o.cogs=0) — ЧП "—", а не фейковые 100% от
+// (выручка−реклама)/выручка, как было раньше (нашли на реальном кейсе: день без рекламы
+// показывал ЧП 100% при реальной марже ~2-10%).
+function dayAllHTML(o){
   const d=o||{};
-  const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,ftrev=d.ftrev||0;
+  const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
+        acq=d.acq||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
   const avg=sls>0?Nf(rev/sls)+'₽':'—';
   let profitPct=null;
-  if(rev>0&&npCtx&&npCtx.cogsTotal>0&&npCtx.grossTotal>0){
-    const share=Math.min(rev/npCtx.grossTotal,1);
-    const dayCogs=npCtx.cogsTotal*share;
-    const dayAcq =(npCtx.acqTotal||0)*share;
-    const np=rev-dayCogs-spend-comm-logi-dayAcq;
+  if(rev>0&&cogs>0){
+    const np=rev-cogs-spend-comm-logi-acq;
     profitPct=np/rev*100;
   }
   const drrPct=rev>0&&spend>0?(spend/rev*100).toFixed(1)+'%':null;
   const commPct=ftrev>0&&comm>0?(comm/ftrev*100).toFixed(1)+'%':null;
   const logiPct=ftrev>0&&logi>0?(logi/ftrev*100).toFixed(1)+'%':null;
+  const acqPct=ftrev>0&&acq>0?(acq/ftrev*100).toFixed(1)+'%':null;
   const warn='style="background:var(--color-background-warning);color:var(--color-text-warning)"';
   return '<div class="pr-wrap day-all">'
     +`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${Nf(ord)}</span></div>`
@@ -738,6 +754,7 @@ function dayAllHTML(o, npCtx){
     +`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${profitPct===null?'':profitPct>=0?'pv':'nv'}">${profitPct===null?'—':profitPct.toFixed(1)+'%'}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${spend>0?Nf(spend)+'₽':'—'}</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${comm>0?Nf(comm)+'₽':'—'}</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}</span>`:''}</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Экв</span><span class="pr-fact">${acq>0?Nf(acq)+'₽':'—'}</span>${acqPct?`<span class="pr-pct" ${warn}>${acqPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${logi>0?Nf(logi)+'₽':'—'}</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}</span>`:''}</div>`
     +'</div>';
 }
@@ -863,20 +880,26 @@ function render(){
   html+=`</tr></thead><tbody>`;
 
   const dayTotals=days.map(()=>0);
-  const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0}));
-  let grandCogs=0,grandAcq=0,grandGross=0; // для ЧП в строке "Итого" (режим "Все")
+  const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0}));
   cats.forEach((cat,catIdx)=>{
     const arts=displayArts.filter(a=>a.cat===cat);
     const cc=CAT_COLORS[cat]||'#eee';
     const catId='cat_'+catIdx;
 
-    // Предвычисление метрик по каждому артикулу (нужно для ЧП категории до рендера строки)
+    // Предвычисление метрик по каждому артикулу (нужно для ЧП категории до рендера строки).
+    // factComm/factAcq/factLogi — ТОЧНЫЕ суммы по видимым дням (wdo, уважает выбор недели),
+    // а не art.commission_sum/acquiring_sum/logistics_sum (те всегда за ВЕСЬ месяц) —
+    // раньше при выборе недели это давало рассинхрон масштабов и завышало ЧП.
     const wdo=days.filter(dv=>!dv.off);
     const artPre=arts.map(art=>({
       art,
       factSls:  wdo.reduce((a,d)=>a+getV(art,d,'sales'),0),
       factRev:  wdo.reduce((a,d)=>a+getV(art,d,'revenue'),0),
       factSpend:wdo.reduce((a,d)=>a+getV(art,d,'spend'),0),
+      factComm: wdo.reduce((a,d)=>a+getV(art,d,'comm'),0),
+      factAcq:  wdo.reduce((a,d)=>a+getV(art,d,'acq'),0),
+      factLogi: wdo.reduce((a,d)=>a+getV(art,d,'logi'),0),
+      factGross:wdo.reduce((a,d)=>{const dd=art.days[d.d];return a+(dd&&!d.off?(dd.ftrev||0):0);},0),
     }));
 
     // Подитоги по категории за каждый день
@@ -892,11 +915,11 @@ function render(){
     // В режиме "Все" — подитог по категории за день это сумма ₽-полей всех артикулов
     const catDayAll=CM!=='all'?null:days.map(day=>{
       if(day.off)return null;
-      const o={ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,ftrev:0};
+      const o={ord:0,sls:0,rev:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0};
       for(const art of arts){
-        const d=gateDay(art.days[day.d]);if(!d)continue;
+        const d=gateDay(art.days[day.d],art.cogs);if(!d)continue;
         o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.spend+=d.spend;
-        o.comm+=d.comm;o.logi+=d.logi;o.ftrev+=d.ftrev;
+        o.comm+=d.comm;o.logi+=d.logi;o.acq+=d.acq;o.cogs+=d.cogs;o.ftrev+=d.ftrev;
       }
       return o;
     });
@@ -906,19 +929,20 @@ function render(){
     const catFactSpend=artPre.reduce((s,p)=>s+p.factSpend,0);
     const catFactDrr=catFactRev>0?parseFloat((catFactSpend/catFactRev*100).toFixed(1)):0;
     const catFact=CM==='drr'?catFactDrr:CM==='revenue'?catFactRev:CM==='spend'?catFactSpend:CM==='sales'?catFactSls:catFactOrd;
-    const catComm=catFactSls>0?arts.reduce((s,art)=>s+art.commission_sum,0):0;
-    const catAcq =catFactSls>0?arts.reduce((s,art)=>s+art.acquiring_sum,0):0;
-    const catLogi=catFactSls>0?arts.reduce((s,art)=>s+art.logistics_sum,0):0;
-    const catGross=arts.reduce((s,art)=>s+art.ft_gross_rev,0);
-    // ЧП по категории
+    // Точные суммы за ВИДИМЫЙ период (wdo) — не art.commission_sum/acquiring_sum/logistics_sum/
+    // ft_gross_rev (те всегда за весь месяц), иначе при выборе недели считаем на рассинхроне
+    // масштабов (неделя vs месяц) — раньше это давало завышенный ЧП вплоть до фейковых 100%.
+    const catComm=artPre.reduce((s,p)=>s+p.factComm,0);
+    const catAcq =artPre.reduce((s,p)=>s+p.factAcq,0);
+    const catLogi=artPre.reduce((s,p)=>s+p.factLogi,0);
+    const catGross=artPre.reduce((s,p)=>s+p.factGross,0);
+    // ЧП по категории — без прорейтинга, всё точное за один и тот же период
     const catCogsTotal=artPre.reduce((s,{art,factSls})=>s+art.cogs*factSls,0);
     let catNp=null;
     if(catFactRev>0&&catCogsTotal>0){
-      const ratio=catGross>0?Math.min(catFactRev/catGross,1):1;
-      catNp=catFactRev-catCogsTotal-catFactSpend-(catComm+catAcq+catLogi)*ratio;
+      catNp=catFactRev-catCogsTotal-catFactSpend-catComm-catAcq-catLogi;
     }
     const catNpPct=catNp!==null&&catFactRev>0?(catNp/catFactRev*100).toFixed(1):null;
-    grandCogs+=catCogsTotal;grandAcq+=catAcq;grandGross+=catGross;
 
     // Взвешенное среднее commission_pct по сумме комиссии
     const _cpArts=arts.filter(a=>a.commission_pct>0&&a.commission_sum>0);
@@ -952,8 +976,7 @@ function render(){
     days.forEach((day,di)=>{
       const sep=wkStarts.has(di)?' wk-sep':'';
       if(CM==='all'){
-        const catNpCtx={cogsTotal:catCogsTotal,acqTotal:catAcq,grossTotal:catGross};
-        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di],catNpCtx)}</td>`;
+        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di])}</td>`;
       }else{
         const v=catDayTotals[di];
         html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
@@ -961,7 +984,7 @@ function render(){
     });
     html+=`<td></td><td></td></tr>`;
 
-    artPre.forEach(({art,factSls,factRev,factSpend})=>{
+    artPre.forEach(({art,factSls,factRev,factSpend,factComm,factAcq,factLogi,factGross})=>{
       const factOrd=wdo.reduce((a,day)=>a+getV(art,day,'orders'),0);
       const factDrr=factRev>0?parseFloat((factSpend/factRev*100).toFixed(1)):0;
       const factCogs=(art.plan_vc+art.plan_fc)*factSls;
@@ -980,9 +1003,10 @@ function render(){
       if(CM==='all'){
         days.forEach((day,i)=>{
           if(day.off)return;
-          const d=gateDay(art.days[day.d]);if(!d)return;
+          const d=gateDay(art.days[day.d],art.cogs);if(!d)return;
           const t=dayTotalsAll[i];
-          t.ord+=d.ord;t.sls+=d.sls;t.rev+=d.rev;t.spend+=d.spend;t.comm+=d.comm;t.logi+=d.logi;t.ftrev+=d.ftrev;
+          t.ord+=d.ord;t.sls+=d.sls;t.rev+=d.rev;t.spend+=d.spend;
+          t.comm+=d.comm;t.logi+=d.logi;t.acq+=d.acq;t.cogs+=d.cogs;t.ftrev+=d.ftrev;
         });
       }
 
@@ -1007,12 +1031,14 @@ function render(){
         ? `<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(factSpend)}₽</span><span class="pr-pct ${art.plan_drr>0&&factDrr>art.plan_drr?'nv':'pv'}" style="background:var(--color-background-warning);color:var(--color-text-warning)">${factDrr}%</span>${art.plan_drr>0?`<span class="pr-sep">/</span><span class="pr-plan">${art.plan_drr}%</span>`:''}</div>`
         : '';
 
-      // Комиссия, эквайринг и логистика из financial_transactions (факт за месяц)
-      // Показываем только если за выбранный период есть продажи — иначе месячный агрегат вводит в заблуждение
-      const comm = factSls > 0 ? art.commission_sum : 0;
-      const acq  = factSls > 0 ? art.acquiring_sum  : 0;
-      const logi = factSls > 0 ? art.logistics_sum  : 0;
-      const gross = art.ft_gross_rev;
+      // Комиссия, эквайринг и логистика — ТОЧНЫЕ суммы за видимый период (factComm/factAcq/
+      // factLogi, из artPre, уважают выбор недели), не art.commission_sum/acquiring_sum/
+      // logistics_sum (те всегда за весь месяц — при выборе недели давали рассинхрон
+      // масштабов и заниженный расход при прорейтинге в ЧП, вплоть до фейковых ~100%).
+      const comm = factComm;
+      const acq  = factAcq;
+      const logi = factLogi;
+      const gross = factGross;
       const commPct = art.commission_pct > 0 ? art.commission_pct.toFixed(1) : (gross > 0 ? (comm / gross * 100).toFixed(1) : null);
       const acqPct  = gross > 0 ? (acq  / gross * 100).toFixed(1) : null;
       const logiPct = gross > 0 ? (logi / gross * 100).toFixed(1) : null;
@@ -1026,13 +1052,13 @@ function render(){
         ? `<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(logi)}₽</span>${logiPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${logiPct}%</span>`:''}</div>`
         : '';
 
-      // ЧП = Выручка - С/С×Продажи - Реклама - (Комиссия+Эквайринг+Логистика пропорционально выручке)
+      // ЧП = Выручка - С/С×Продажи - Реклама - Комиссия - Эквайринг - Логистика.
+      // Все компоненты точные за видимый период (см. artPre) — без прорейтинга по ratio,
+      // который раньше смешивал масштаб недели (выручка) с масштабом месяца (комиссия/
+      // эквайринг/логистика из art.*_sum) при выбранной неделе.
       let prNp = '';
       if (factRev > 0 && art.cogs > 0) {
-        const gross = art.ft_gross_rev;
-        const ratio = gross > 0 ? Math.min(factRev / gross, 1) : 1;
-        const proratedPlatform = (comm + acq + logi) * ratio;
-        const np = factRev - art.cogs * factSls - factSpend - proratedPlatform;
+        const np = factRev - art.cogs * factSls - factSpend - comm - acq - logi;
         const npPct = (np / factRev * 100).toFixed(1);
         const npCls = np >= 0 ? 'pv' : 'nv';
         prNp = `<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${Nf(np)}₽</span><span class="pr-pct ${npCls}" style="background:${np>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${np>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${npPct}%</span></div>`;
@@ -1061,8 +1087,7 @@ function render(){
       days.forEach((day,di)=>{
         const sep=wkStarts.has(di)?' wk-sep':'';
         if(CM==='all'){
-          const artNpCtx={cogsTotal:art.cogs*factSls,acqTotal:acq,grossTotal:gross};
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d]),artNpCtx)}</td>`;
+          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d],art.cogs))}</td>`;
         }else{
           const v=getV(art,day,CM);
           html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
@@ -1074,13 +1099,12 @@ function render(){
     });
   });
 
-  const grandNpCtx={cogsTotal:grandCogs,acqTotal:grandAcq,grossTotal:grandGross};
   html+=`<tr class="total-row">
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td><td class="s2 plan-col"></td>`;
   days.forEach((day,di)=>{
     const sep=wkStarts.has(di)?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di],grandNpCtx)}</td>`;
+      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di])}</td>`;
     }else{
       html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
     }
