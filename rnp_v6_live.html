@@ -440,7 +440,7 @@ let COMMENTS={}; // seller_article -> {comment, article_id}
 async function loadComments(){
   try{
     const url=`${SB_URL}/rest/v1/article_comments?select=id,article_id,comment,articles(seller_article,marketplace)&limit=5000`;
-    const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+    const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
     if(!r.ok)return;
     const data=await r.json();
     COMMENTS={};
@@ -460,7 +460,7 @@ async function editComment(sellerArticle,mp){
     let articleId=cur?cur.article_id:null;
     if(!articleId){
       const r=await fetch(`${SB_URL}/rest/v1/articles?select=id&seller_article=eq.${encodeURIComponent(sellerArticle)}&marketplace=eq.${encodeURIComponent(mp)}`,
-        {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+        {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
       const rows=await r.json();
       if(!rows.length){alert('Артикул не найден в справочнике');return;}
       articleId=rows[0].id;
@@ -468,12 +468,12 @@ async function editComment(sellerArticle,mp){
     if(!text.trim()){
       // Пустой текст — удаляем комментарий
       await fetch(`${SB_URL}/rest/v1/article_comments?article_id=eq.${articleId}`,
-        {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+        {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
       delete COMMENTS[sellerArticle];
     }else{
       await fetch(`${SB_URL}/rest/v1/article_comments`,{
         method:'POST',
-        headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`,'Content-Type':'application/json',
+        headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`,'Content-Type':'application/json',
                  'Prefer':'resolution=merge-duplicates'},
         body:JSON.stringify({article_id:articleId,comment:text.trim(),updated_at:new Date().toISOString()}),
       });
@@ -971,6 +971,21 @@ function buildTrendBuckets(){
     o.ftrev+=parseFloat(r.ft_rev_day)||0;
     o.cogsSum+=(parseFloat(r.cogs)||0)*(r.buyouts_qty||0);
   }
+  // Заполняем ВСЕ даты диапазона нулями — v_daily_dashboard строится через JOIN из
+  // daily_metrics, и день без единой строки (не 0, а прямо отсутствие записи) просто
+  // выпадает из выборки, из-за чего график молча "перепрыгивал" через пустые дни
+  // вместо честного нуля.
+  // toISOString() тут нельзя — она конвертирует в UTC и на сдвиг локального часового
+  // пояса сдвигает дату на день назад/вперёд (нашли на реальном кейсе: график молча
+  // пропускал день). Форматируем вручную из локальных getFullYear/Month/Date.
+  const fmtLocal=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  let cur=new Date(TREND.dateFrom+'T00:00:00');
+  const endD=new Date(TREND.dateTo+'T00:00:00');
+  while(cur<=endD){
+    const key=fmtLocal(cur);
+    if(!byDate[key])byDate[key]={date:key,ord:0,sls:0,rev:0,spend:0,shows:0,clicks:0,comm:0,logi:0,acq:0,ftrev:0,cogsSum:0};
+    cur.setDate(cur.getDate()+1);
+  }
   const dates=Object.keys(byDate).sort();
   const g=TREND.granularity;
   if(g==='day'){
@@ -983,7 +998,7 @@ function buildTrendBuckets(){
     let key,label;
     if(g==='week'){
       const monday=new Date(dt);monday.setDate(dt.getDate()-((dt.getDay()+6)%7));
-      key=monday.toISOString().slice(0,10);
+      key=fmtLocal(monday);
       label='нед '+key.slice(5).replace('-','.');
     }else{
       key=d.slice(0,7);
@@ -1415,10 +1430,17 @@ function applyRoleGating(session){
   });
 }
 
+// Токен реальной сессии — нужен для запросов к articles/article_comments
+// (RLS-политики там TO authenticated, не anon). SB_ANON годится только для
+// таблиц/вьюх с политикой TO anon (v_daily_dashboard, sync_log и т.п.).
+let CURRENT_SESSION=null;
+function authToken(){return CURRENT_SESSION?.access_token||SB_ANON;}
+
 let _initing=false;
 async function initApp(session){
   if(_initing)return;
   _initing=true;
+  CURRENT_SESSION=session;
   applyRoleGating(session);
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('app').style.display='block';
@@ -1442,6 +1464,7 @@ sb.auth.onAuthStateChange(async(event,session)=>{
   if(session){
     await initApp(session);
   }else{
+    CURRENT_SESSION=null;
     document.getElementById('login-overlay').style.display='flex';
     document.getElementById('app').style.display='none';
   }
