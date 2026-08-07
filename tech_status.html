@@ -59,8 +59,8 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
 <div class="w" id="app" style="display:none">
   <a class="back" href="rnp_v6_live.html">← Дашборд</a>
   <a class="back" href="http://localhost:8792" target="_blank" style="margin-left:14px"
-     title="Выдача доступа и импорт файлов (нужен запущенный execution/import_server.py, порт 8792)">
-    👤 Выдать доступ
+     title="Импорт файлов WB/OZON (нужен запущенный execution/import_server.py, порт 8792)">
+    📥 Импорт файлов
   </a>
   <a class="back" href="#" onclick="doLogout();return false" style="margin-left:14px">Выйти</a>
   <h1 style="margin-top:8px">🔧 Тех лист</h1>
@@ -69,6 +69,33 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
   <div id="denied" style="display:none">Доступ ограничен — этот раздел виден только с полным доступом.</div>
 
   <div id="content">
+    <h2>👤 Доступ пользователей</h2>
+    <div class="card" style="margin-bottom:14px">
+      <div class="muted" style="margin-bottom:10px;font-size:11px">
+        Требует запущенный локальный сервер (<code>py execution/import_server.py</code>, порт 8792) —
+        ключ администратора базы никогда не покидает твой компьютер, поэтому создание логинов
+        физически не может работать напрямую с этой публичной страницы без него.
+      </div>
+      <div id="usersState" class="muted">Проверка локального сервера…</div>
+      <table id="usersTable" style="display:none;margin-top:8px">
+        <thead><tr><th>Email</th><th>Роль</th><th>Создан</th></tr></thead>
+        <tbody id="usersTbody"></tbody>
+      </table>
+      <div id="createUserForm" style="display:none;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="email" id="newUserEmail" placeholder="email@example.com"
+          style="padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;min-width:200px">
+        <input type="text" id="newUserPassword" placeholder="пароль (мин. 6 символов)"
+          style="padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;min-width:170px">
+        <select id="newUserRole"
+          style="padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit">
+          <option value="viewer">Ограниченный (без тех.данных)</option>
+          <option value="admin">Полный доступ</option>
+        </select>
+        <button onclick="createLocalUser()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font:inherit">Создать</button>
+      </div>
+      <div id="createUserMsg" style="margin-top:8px;font-size:12px"></div>
+    </div>
+
     <h2>Пропуски данных (последние 30 дней)</h2>
     <div class="card" id="gaps"><div class="loading">Загрузка…</div></div>
 
@@ -106,7 +133,62 @@ function gateByRole(session){
 async function initApp(session){
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('app').style.display='block';
-  if(gateByRole(session)){loadLog();loadGaps();}
+  if(gateByRole(session)){loadLog();loadGaps();loadLocalUsers();}
+}
+
+// ── Доступ пользователей — идёт на локальный import_server.py (порт 8792). ──
+// HTTPS-страница (GitHub Pages) может стучаться в http://localhost — браузеры
+// считают localhost "потенциально доверенным" и не блокируют это как mixed content.
+// Сервис-ключ Supabase остаётся ТОЛЬКО на локальном сервере — сюда, на публичную
+// страницу, он никогда не попадает.
+const LOCAL_API='http://localhost:8792';
+const ROLE_RU={admin:'Полный доступ',viewer:'Ограниченный'};
+
+async function loadLocalUsers(){
+  const stateEl=document.getElementById('usersState');
+  try{
+    const r=await fetch(`${LOCAL_API}/api/users`);
+    if(!r.ok)throw new Error(`${r.status}`);
+    const data=await r.json();
+    if(!data.ok)throw new Error(data.error||'неизвестная ошибка');
+    stateEl.style.display='none';
+    document.getElementById('usersTable').style.display='table';
+    document.getElementById('createUserForm').style.display='flex';
+    document.getElementById('usersTbody').innerHTML=data.users.map(u=>{
+      const created=u.created_at?new Date(u.created_at).toLocaleDateString('ru-RU'):'';
+      return `<tr><td>${u.email}</td><td><span class="pill ${u.role==='admin'?'ok':'warn'}">${ROLE_RU[u.role]||u.role}</span></td><td class="muted">${created}</td></tr>`;
+    }).join('');
+  }catch(e){
+    stateEl.style.display='block';
+    stateEl.innerHTML=`<span class="err">Локальный сервер не отвечает</span> — запусти <code>py execution/import_server.py</code> на компьютере, где ведётся администрирование, и обнови страницу.`;
+    document.getElementById('usersTable').style.display='none';
+    document.getElementById('createUserForm').style.display='none';
+  }
+}
+
+async function createLocalUser(){
+  const email=document.getElementById('newUserEmail').value.trim();
+  const password=document.getElementById('newUserPassword').value;
+  const role=document.getElementById('newUserRole').value;
+  const msg=document.getElementById('createUserMsg');
+  msg.textContent='';
+  try{
+    const r=await fetch(`${LOCAL_API}/api/create-user`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password,role}),
+    });
+    const data=await r.json();
+    if(data.ok){
+      msg.innerHTML=`<span class="ok">Готово — ${email} может входить.</span>`;
+      document.getElementById('newUserEmail').value='';
+      document.getElementById('newUserPassword').value='';
+      loadLocalUsers();
+    }else{
+      msg.innerHTML=`<span class="err">Ошибка: ${data.error}</span>`;
+    }
+  }catch(e){
+    msg.innerHTML=`<span class="err">Локальный сервер не отвечает: ${e.message}</span>`;
+  }
 }
 
 sb.auth.onAuthStateChange((event,session)=>{
