@@ -72,16 +72,21 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
     <h2>👤 Доступ пользователей</h2>
     <div class="card" style="margin-bottom:14px">
       <div class="muted" style="margin-bottom:10px;font-size:11px">
-        Требует запущенный локальный сервер (<code>py execution/import_server.py</code>, порт 8792) —
-        ключ администратора базы никогда не покидает твой компьютер, поэтому создание логинов
-        физически не может работать напрямую с этой публичной страницы без него.
+        Список читается из кэша в базе — работает всегда, без локального сервера.
+        Актуализация списка и выдача НОВОГО доступа всё же требуют запущенный
+        <code>py execution/import_server.py</code> (порт 8792) — ключ администратора базы
+        физически не может покидать твой компьютер.
       </div>
-      <div id="usersState" class="muted">Проверка локального сервера…</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <button onclick="syncUsersNow()" id="btnSync" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit">🔄 Обновить список</button>
+        <span id="syncedAt" class="muted" style="font-size:11px"></span>
+      </div>
+      <div id="usersState" class="muted">Загрузка…</div>
       <table id="usersTable" style="display:none;margin-top:8px">
         <thead><tr><th>Email</th><th>Роль</th><th>Создан</th></tr></thead>
         <tbody id="usersTbody"></tbody>
       </table>
-      <div id="createUserForm" style="display:none;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div id="createUserForm" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="email" id="newUserEmail" placeholder="email@example.com"
           style="padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;min-width:200px">
         <input type="text" id="newUserPassword" placeholder="пароль (мин. 6 символов)"
@@ -91,7 +96,7 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
           <option value="viewer">Ограниченный (без тех.данных)</option>
           <option value="admin">Полный доступ</option>
         </select>
-        <button onclick="createLocalUser()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font:inherit">Создать</button>
+        <button onclick="createLocalUser()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font:inherit">Создать (нужен локальный сервер)</button>
       </div>
       <div id="createUserMsg" style="margin-top:8px;font-size:12px"></div>
     </div>
@@ -130,39 +135,74 @@ function gateByRole(session){
   return !denied;
 }
 
+// Токен реальной сессии — user_access_cache и article_comments и т.п. разрешены
+// TO authenticated, не anon: SB_ANON тут не пройдёт RLS, нужен JWT залогиненного юзера.
+let CURRENT_SESSION=null;
+function authToken(){return CURRENT_SESSION?.access_token||SB_ANON;}
+
 async function initApp(session){
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('app').style.display='block';
-  if(gateByRole(session)){loadLog();loadGaps();loadLocalUsers();}
+  CURRENT_SESSION=session;
+  if(gateByRole(session)){loadLog();loadGaps();loadUsersFromCache();}
 }
 
-// ── Доступ пользователей — идёт на локальный import_server.py (порт 8792). ──
-// HTTPS-страница (GitHub Pages) может стучаться в http://localhost — браузеры
-// считают localhost "потенциально доверенным" и не блокируют это как mixed content.
-// Сервис-ключ Supabase остаётся ТОЛЬКО на локальном сервере — сюда, на публичную
-// страницу, он никогда не попадает.
+// ── Доступ пользователей ──────────────────────────────────────
+// Просмотр — из кэша в Supabase (user_access_cache), работает всегда, без
+// локального сервера. Актуализация кэша и выдача НОВОГО доступа всё равно идут
+// на localhost:8792 (execution/import_server.py) — ключ администратора базы
+// физически не может покидать компьютер, где сервер запущен. HTTPS-страница
+// (GitHub Pages) может стучаться в http://localhost — браузеры считают localhost
+// "потенциально доверенным" и не блокируют это как mixed content.
 const LOCAL_API='http://localhost:8792';
 const ROLE_RU={admin:'Полный доступ',viewer:'Ограниченный'};
 
-async function loadLocalUsers(){
+function renderUsersTable(users){
+  document.getElementById('usersTbody').innerHTML=users.map(u=>{
+    const created=u.created_at?new Date(u.created_at).toLocaleDateString('ru-RU'):'';
+    return `<tr><td>${u.email}</td><td><span class="pill ${u.role==='admin'?'ok':'warn'}">${ROLE_RU[u.role]||u.role}</span></td><td class="muted">${created}</td></tr>`;
+  }).join('');
+}
+
+async function loadUsersFromCache(){
   const stateEl=document.getElementById('usersState');
   try{
-    const r=await fetch(`${LOCAL_API}/api/users`);
+    const r=await fetch(`${SB_URL}/rest/v1/user_access_cache?select=*&order=created_at.desc`,
+      {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
     if(!r.ok)throw new Error(`${r.status}`);
-    const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'неизвестная ошибка');
+    const users=await r.json();
+    if(!users.length){
+      stateEl.style.display='block';
+      stateEl.innerHTML='Кэш пуст — нажми "Обновить список" (нужен запущенный локальный сервер).';
+      document.getElementById('usersTable').style.display='none';
+      return;
+    }
     stateEl.style.display='none';
     document.getElementById('usersTable').style.display='table';
-    document.getElementById('createUserForm').style.display='flex';
-    document.getElementById('usersTbody').innerHTML=data.users.map(u=>{
-      const created=u.created_at?new Date(u.created_at).toLocaleDateString('ru-RU'):'';
-      return `<tr><td>${u.email}</td><td><span class="pill ${u.role==='admin'?'ok':'warn'}">${ROLE_RU[u.role]||u.role}</span></td><td class="muted">${created}</td></tr>`;
-    }).join('');
+    renderUsersTable(users);
+    const latest=users.reduce((a,u)=>u.synced_at>a?u.synced_at:a,users[0].synced_at);
+    document.getElementById('syncedAt').textContent=`обновлено: ${new Date(latest).toLocaleString('ru-RU')}`;
   }catch(e){
     stateEl.style.display='block';
-    stateEl.innerHTML=`<span class="err">Локальный сервер не отвечает</span> — запусти <code>py execution/import_server.py</code> на компьютере, где ведётся администрирование, и обнови страницу.`;
+    stateEl.innerHTML=`<span class="err">Ошибка чтения кэша: ${e.message}</span>`;
     document.getElementById('usersTable').style.display='none';
-    document.getElementById('createUserForm').style.display='none';
+  }
+}
+
+async function syncUsersNow(){
+  const btn=document.getElementById('btnSync');
+  const stateEl=document.getElementById('usersState');
+  btn.disabled=true;btn.textContent='Обновляю…';
+  try{
+    const r=await fetch(`${LOCAL_API}/api/sync-users`,{method:'POST'});
+    const data=await r.json();
+    if(!data.ok)throw new Error(data.error||'неизвестная ошибка');
+    await loadUsersFromCache();
+  }catch(e){
+    stateEl.style.display='block';
+    stateEl.innerHTML=`<span class="err">Локальный сервер не отвечает</span> — запусти <code>py execution/import_server.py</code> и повтори. Показан последний сохранённый список (если он есть выше).`;
+  }finally{
+    btn.disabled=false;btn.textContent='🔄 Обновить список';
   }
 }
 
@@ -182,7 +222,7 @@ async function createLocalUser(){
       msg.innerHTML=`<span class="ok">Готово — ${email} может входить.</span>`;
       document.getElementById('newUserEmail').value='';
       document.getElementById('newUserPassword').value='';
-      loadLocalUsers();
+      syncUsersNow(); // сразу актуализируем кэш, чтобы новый юзер появился в таблице
     }else{
       msg.innerHTML=`<span class="err">Ошибка: ${data.error}</span>`;
     }
@@ -194,6 +234,7 @@ async function createLocalUser(){
 sb.auth.onAuthStateChange((event,session)=>{
   if(session){initApp(session);}
   else{
+    CURRENT_SESSION=null;
     document.getElementById('login-overlay').style.display='flex';
     document.getElementById('app').style.display='none';
   }
