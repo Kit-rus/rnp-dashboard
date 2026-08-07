@@ -91,8 +91,8 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .tbl-wrap{overflow-x:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg)}
 table.main{border-collapse:collapse;width:100%;font-size:11px}
 table.main th.s0,table.main td.s0{position:sticky;left:0;z-index:3;background:var(--color-background-primary);min-width:64px;max-width:64px;width:64px}
-table.main th.s1,table.main td.s1{position:sticky;left:64px;z-index:3;background:var(--color-background-primary);min-width:160px;max-width:160px;width:160px}
-table.main th.s2,table.main td.s2{position:sticky;left:224px;z-index:3;background:var(--color-background-primary);min-width:148px}
+table.main th.s1,table.main td.s1{position:sticky;left:64px;z-index:3;background:var(--color-background-primary);min-width:220px;max-width:220px;width:220px}
+table.main th.s2,table.main td.s2{position:sticky;left:284px;z-index:3;background:var(--color-background-primary);min-width:148px}
 table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:500;padding:5px 6px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center;white-space:nowrap;background:var(--color-background-primary);top:0}
 table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{z-index:4;text-align:left}
 table.main thead th.plan-col{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
@@ -107,15 +107,13 @@ table.main tr.cat-row td.cat-sub{text-align:center;font-size:10px;font-weight:60
 table.main tr.art-row td{padding:4px 5px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle;text-align:center}
 table.main tr.art-row:hover td{background:rgba(128,128,128,0.04)}
 table.main tr.art-row:hover td.s0,table.main tr.art-row:hover td.s1,table.main tr.art-row:hover td.s2{background:var(--color-background-secondary)}
-table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td.s2{text-align:left}
+table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td.s2{text-align:left;vertical-align:top}
 .photo-ph{width:56px;height:68px;border-radius:4px;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center}
-.art-name{font-size:11px;color:var(--color-text-primary);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px}
-.art-comment{font-size:10px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  max-width:155px;margin-top:2px;padding:1px 4px;border-radius:4px;cursor:text}
-.art-comment:hover{background:var(--color-background-secondary)}
-.art-comment-ph{color:var(--color-text-tertiary);font-style:italic;opacity:.6}
-.art-comment-input{font-size:10px;width:150px;padding:1px 4px;margin-top:2px;border:1px solid var(--color-border-secondary);
-  border-radius:4px;background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)}
+.art-name{font-size:11px;color:var(--color-text-primary);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;line-height:16px}
+.art-comment-input{display:block;box-sizing:border-box;width:100%;max-width:210px;margin-top:3px;font-size:10px;
+  padding:4px 6px;border:1px solid var(--color-border-secondary);border-radius:4px;resize:vertical;
+  background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)}
+.art-comment-input::placeholder{color:var(--color-text-tertiary);font-style:italic}
 /* Старые стили (оставляем для совместимости) */
 .pf-cell{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:2px 6px;width:100%}
 .pf-fact{font-size:13px;font-weight:500;color:var(--color-text-primary)}
@@ -463,41 +461,21 @@ function escapeHtml(s){
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// Видимое поле комментария в строке артикула (не hover-иконка, не prompt()) —
-// текст всегда виден (или плейсхолдер), клик по нему открывает обычный <input>.
+// Обычное редактируемое поле комментария в строке артикула — прямоугольный
+// textarea, всегда видимый (не hover-иконка, не prompt(), не click-to-edit).
 function commentFieldHTML(sellerArticle,artKey,mp){
   const cur=COMMENTS[sellerArticle];
   const text=cur?cur.comment:'';
   const mpKey=mp.replace(/'/g,"\\'");
-  if(text){
-    return `<div class="art-comment" title="${escapeHtml(text)}"
-      onclick="startEditComment(this,'${artKey}','${mpKey}')">${escapeHtml(text)}</div>`;
-  }
-  return `<div class="art-comment art-comment-ph"
-    onclick="startEditComment(this,'${artKey}','${mpKey}')">+ комментарий</div>`;
+  return `<textarea class="art-comment-input" rows="10" placeholder="+ комментарий"
+    onclick="event.stopPropagation()"
+    onblur="saveComment(this,'${artKey}','${mpKey}')">${escapeHtml(text)}</textarea>`;
 }
 
-function startEditComment(el,sellerArticle,mp){
+async function saveComment(textarea,sellerArticle,mp){
+  const text=textarea.value;
   const cur=COMMENTS[sellerArticle];
-  const input=document.createElement('input');
-  input.type='text';
-  input.className='art-comment-input';
-  input.value=cur?cur.comment:'';
-  input.onclick=e=>e.stopPropagation();
-  input.onkeydown=e=>{
-    if(e.key==='Enter')input.blur();
-    if(e.key==='Escape'){input.dataset.cancel='1';input.blur();}
-  };
-  input.onblur=()=>finishEditComment(input,sellerArticle,mp);
-  el.replaceWith(input); // прямая ссылка на реальный DOM-элемент, а не querySelector вслепую
-  input.focus();input.select();
-}
-
-async function finishEditComment(input,sellerArticle,mp){
-  if(input.dataset.cancel){render();return;} // Esc — отмена, просто перерисовать как было
-  const text=input.value;
-  const cur=COMMENTS[sellerArticle];
-  if(text.trim()===(cur?cur.comment:'')){render();return;} // не менялось — не дёргаем сеть
+  if(text.trim()===(cur?cur.comment:'')){return;} // не менялось — не дёргаем сеть
   try{
     let articleId=cur?cur.article_id:null;
     if(!articleId){
