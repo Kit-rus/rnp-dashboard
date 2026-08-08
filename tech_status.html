@@ -375,10 +375,28 @@ sb.auth.onAuthStateChange((event,session)=>{
 })();
 
 async function sbGet(path){
+  // sync_log/articles/financial_transactions разрешены в Supabase только TO authenticated —
+  // статичный SB_ANON тут молча вернёт 0 строк (RLS не ошибка, а пустой результат).
+  // Нужен реальный JWT залогиненного юзера, см. authToken() и её комментарий выше.
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{headers:{
-    'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+    'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
   if(!r.ok)throw new Error(`${r.status}: ${await r.text()}`);
   return r.json();
+}
+
+// PostgREST/Supabase молча режет ответ до ~1000 строк, даже если в URL стоит limit=20000
+// (см. HANDOFF.md) — запросы за 30 дней по всем артикулам легко превышают это. Пагинируем
+// сами через offset, тот же приём, что loadMonthData() в rnp_v6_live.html.
+async function sbGetAll(path,pageSize=1000){
+  const sep=path.includes('?')?'&':'?';
+  let all=[],offset=0;
+  while(true){
+    const rows=await sbGet(`${path}${sep}limit=${pageSize}&offset=${offset}`);
+    all=all.concat(rows);
+    if(rows.length<pageSize)break;
+    offset+=pageSize;
+  }
+  return all;
 }
 
 const STEP_RU={orders:'Заказы',buyouts:'Выкупы',ads:'Реклама',stocks:'Остатки',
@@ -436,19 +454,31 @@ async function loadGaps(){
   try{
     const days=dateRange(30);
     const from=days[0];
-    // daily_metrics и реклама — из v_daily_dashboard
-    const dm=await sbGet(`v_daily_dashboard?select=date,marketplace,orders_qty,spend&date=gte.${from}&limit=20000`);
-    // финансы WB — из financial_transactions
-    let fin=[];
-    try{fin=await sbGet(`financial_transactions?select=date&date=gte.${from}&limit=20000`);}catch(e){}
+    // daily_metrics и реклама — из v_daily_dashboard. Пагинируем: за 30 дней по всем
+    // артикулам легко >1000 строк, а PostgREST молча обрезает нестраничный запрос —
+    // без этого WB/OZON могли ложно показываться как "100% пропусков" (не хватило
+    // страницы, чтобы вообще дойти до их строк).
+    const dm=await sbGetAll(`v_daily_dashboard?select=date,marketplace,orders_qty,spend&date=gte.${from}`);
+    // Финансы — из financial_transactions. Таблица общая для WB и OZON, marketplace
+    // определяем через article_id -> articles.marketplace (в самой таблице его нет).
+    let fin=[],artMp={};
+    try{
+      fin=await sbGetAll(`financial_transactions?select=date,article_id&date=gte.${from}`);
+      const arts=await sbGetAll(`articles?select=id,marketplace`);
+      artMp=Object.fromEntries(arts.map(a=>[a.id,a.marketplace]));
+    }catch(e){}
 
-    const has={wb_dm:new Set(),oz_dm:new Set(),wb_ads:new Set(),oz_ads:new Set(),wb_fin:new Set()};
+    const has={wb_dm:new Set(),oz_dm:new Set(),wb_ads:new Set(),oz_ads:new Set(),wb_fin:new Set(),oz_fin:new Set()};
     for(const r of dm){
       const mp=r.marketplace;
       if(parseInt(r.orders_qty)>0) has[mp==='wb'?'wb_dm':'oz_dm'].add(r.date);
       if(parseFloat(r.spend)>0)    has[mp==='wb'?'wb_ads':'oz_ads'].add(r.date);
     }
-    for(const r of fin) has.wb_fin.add(r.date);
+    for(const r of fin){
+      const mp=artMp[r.article_id];
+      if(mp==='wb')has.wb_fin.add(r.date);
+      else if(mp==='ozon')has.oz_fin.add(r.date);
+    }
 
     // Вчера и раньше данные должны быть каждый день (заказы могут быть 0 в мёртвый день,
     // но 30 дней подряд нулей — это пропуск загрузки, помечаем как пропуск при полном отсутствии строк)
@@ -458,6 +488,7 @@ async function loadGaps(){
       ['WB — финансовая детализация', days.filter(d=>!has.wb_fin.has(d))],
       ['OZON — заказы/выручка', days.filter(d=>!has.oz_dm.has(d))],
       ['OZON — реклама (расход)', days.filter(d=>!has.oz_ads.has(d))],
+      ['OZON — финансовая детализация', days.filter(d=>!has.oz_fin.has(d))],
     ];
     let h='<table><tr><th>Источник</th><th>Пропуски</th></tr>';
     for(const [name,missing] of rows)
