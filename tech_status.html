@@ -450,6 +450,17 @@ function gapCell(missing){
   return`<span class="gap">${missing.length} дн:</span> <span class="msg">${shown}${short.length>8?'…':''}</span>`;
 }
 
+// Строит функцию-проверку "день X подтверждён успешным синком шага step для marketplace mp"
+// по записям sync_log со status=ok — их date_from..date_to считаем подтверждённым диапазоном
+// (даже если внутри него 0 строк/спенда — это ЗНАЧИТ "проверили и там правда пусто", а не
+// "не проверяли"). Без этого 0 расхода в ad_stats неотличимо от того, что импорт вовсе
+// не запускался за этот день — а это разные вещи.
+function buildConfirmedChecker(log,mp,steps){
+  const ranges=log.filter(r=>r.status==='ok' && r.marketplace===mp && steps.includes(r.step)
+                              && r.date_from && r.date_to);
+  return day=>ranges.some(r=>r.date_from<=day && day<=r.date_to);
+}
+
 async function loadGaps(){
   try{
     const days=dateRange(30);
@@ -467,6 +478,12 @@ async function loadGaps(){
       const arts=await sbGetAll(`articles?select=id,marketplace`);
       artMp=Object.fromEntries(arts.map(a=>[a.id,a.marketplace]));
     }catch(e){}
+    // Журнал синков — источник подтверждения "проверяли, там правда пусто" (см. buildConfirmedChecker).
+    // Берём с запасом от начала окна, т.к. один запуск может покрывать широкий диапазон дат
+    // (напр. --days 30), а не только сегодняшний день.
+    let log=[];
+    try{ log=await sbGetAll(`sync_log?select=marketplace,step,status,date_from,date_to&date_to=gte.${from}`); }
+    catch(e){}
 
     const has={wb_dm:new Set(),oz_dm:new Set(),wb_ads:new Set(),oz_ads:new Set(),wb_fin:new Set(),oz_fin:new Set()};
     for(const r of dm){
@@ -480,20 +497,32 @@ async function loadGaps(){
       else if(mp==='ozon')has.oz_fin.add(r.date);
     }
 
-    // Вчера и раньше данные должны быть каждый день (заказы могут быть 0 в мёртвый день,
-    // но 30 дней подряд нулей — это пропуск загрузки, помечаем как пропуск при полном отсутствии строк)
+    const confirmed={
+      wb_dm:  buildConfirmedChecker(log,'wb','orders'),
+      wb_ads: buildConfirmedChecker(log,'wb','ads'),
+      wb_fin: buildConfirmedChecker(log,'wb','finance'),
+      oz_dm:  buildConfirmedChecker(log,'ozon','analytics'),
+      oz_ads: buildConfirmedChecker(log,'ozon','ads'),
+      oz_fin: buildConfirmedChecker(log,'ozon','finance'),
+    };
+
+    // Реальный пропуск = нет ни данных, ни подтверждающего успешного синка за этот день.
+    // День без данных, но с ok-синком, покрывающим его — не пропуск: отчёт подтвердил,
+    // что расход/данные действительно 0, а не что мы забыли проверить.
     const rows=[
-      ['WB — заказы/выручка', days.filter(d=>!has.wb_dm.has(d))],
-      ['WB — реклама (расход)', days.filter(d=>!has.wb_ads.has(d))],
-      ['WB — финансовая детализация', days.filter(d=>!has.wb_fin.has(d))],
-      ['OZON — заказы/выручка', days.filter(d=>!has.oz_dm.has(d))],
-      ['OZON — реклама (расход)', days.filter(d=>!has.oz_ads.has(d))],
-      ['OZON — финансовая детализация', days.filter(d=>!has.oz_fin.has(d))],
+      ['WB — заказы/выручка', days.filter(d=>!has.wb_dm.has(d)&&!confirmed.wb_dm(d))],
+      ['WB — реклама (расход)', days.filter(d=>!has.wb_ads.has(d)&&!confirmed.wb_ads(d))],
+      ['WB — финансовая детализация', days.filter(d=>!has.wb_fin.has(d)&&!confirmed.wb_fin(d))],
+      ['OZON — заказы/выручка', days.filter(d=>!has.oz_dm.has(d)&&!confirmed.oz_dm(d))],
+      ['OZON — реклама (расход)', days.filter(d=>!has.oz_ads.has(d)&&!confirmed.oz_ads(d))],
+      ['OZON — финансовая детализация', days.filter(d=>!has.oz_fin.has(d)&&!confirmed.oz_fin(d))],
     ];
     let h='<table><tr><th>Источник</th><th>Пропуски</th></tr>';
     for(const [name,missing] of rows)
       h+=`<tr><td>${name}</td><td>${gapCell(missing)}</td></tr>`;
-    h+='</table><div class="muted" style="margin-top:8px;font-size:11px">Пропуск = день без единой строки данных. Дни без продаж/рекламы тоже попадают сюда — сверяйтесь с журналом ниже: если статус ok, данных в тот день просто не было.</div>';
+    h+='</table><div class="muted" style="margin-top:8px;font-size:11px">Пропуск = день без данных И без подтверждающего успешного синка в журнале ниже '
+      +'(т.е. либо не проверяли, либо проверка упала). Если синк за этот день был ok, но данных 0 — '
+      +'это не пропуск, отчёт подтвердил, что там действительно пусто.</div>';
     document.getElementById('gaps').innerHTML=h;
   }catch(e){
     document.getElementById('gaps').innerHTML=`<span class="err">Ошибка: ${e.message}</span>`;
