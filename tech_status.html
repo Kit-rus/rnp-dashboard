@@ -42,6 +42,13 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
   font-size:13px;cursor:pointer;font-weight:500;font-family:inherit}
 .lerr{font-size:11px;color:var(--err);margin-top:8px;min-height:16px}
 #denied{padding:40px 0;text-align:center;color:var(--text2)}
+/* ── Импорт файлов (drag&drop) ────────────────────────── */
+.drop{border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;color:var(--text2)}
+.drop.over{border-color:var(--accent);color:var(--text)}
+.drop input{display:none}
+.import-card{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px;font-size:12px}
+.import-card .fname{font-weight:600;margin-bottom:2px}
+.import-card .err{color:var(--err)}
 </style>
 </head>
 <body>
@@ -58,10 +65,7 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
 
 <div class="w" id="app" style="display:none">
   <a class="back" href="rnp_v6_live.html">← Дашборд</a>
-  <a class="back" href="http://localhost:8792" target="_blank" style="margin-left:14px"
-     title="Импорт файлов WB/OZON (нужен запущенный execution/import_server.py, порт 8792)">
-    📥 Импорт файлов
-  </a>
+  <a class="back" href="#import-section" style="margin-left:14px">📥 Импорт файлов</a>
   <a class="back" href="#" onclick="doLogout();return false" style="margin-left:14px">Выйти</a>
   <h1 style="margin-top:8px">🔧 Тех лист</h1>
   <div class="sub">Статус загрузки данных и пропуски. Обновляется при каждом запуске API-скриптов.</div>
@@ -99,6 +103,28 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
         <button onclick="createLocalUser()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font:inherit">Создать (нужен локальный сервер)</button>
       </div>
       <div id="createUserMsg" style="margin-top:8px;font-size:12px"></div>
+    </div>
+
+    <h2 id="import-section">📦 Импорт файлов</h2>
+    <div class="card" style="margin-bottom:14px">
+      <div class="muted" style="margin-bottom:10px;font-size:11px">
+        Перетащи сюда файлы WB/OZON для ручного импорта — в т.ч. экспорт «Заказы» (FBO/FBS) из
+        личного кабинета OZON: раздел «Заказы» → FBO или FBS → кнопка «Экспорт». Это единственный
+        способ получить цену покупателя после СПП — OZON убрал это поле из API 12.11.2025, только
+        ручной экспорт. Обрабатывается локально сервером <code>py execution/import_server.py</code>
+        (порт 8792) — сырые данные и service-ключ Supabase в браузер не попадают, нужен запущенный
+        локальный сервер.
+      </div>
+      <div class="drop" id="drop">
+        <div style="font-size:28px">📦</div>
+        <div>Перетащи файлы сюда или кликни для выбора</div>
+        <input type="file" id="fileInput" multiple>
+      </div>
+      <div id="importList"></div>
+      <div id="importActions" style="display:none;margin-top:10px">
+        <button onclick="doImport()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font:inherit">Импортировать в Supabase</button>
+        <button onclick="resetImport()" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit;margin-left:8px">Сбросить</button>
+      </div>
     </div>
 
     <h2>Пропуски данных (последние 30 дней)</h2>
@@ -229,6 +255,110 @@ async function createLocalUser(){
   }catch(e){
     msg.innerHTML=`<span class="err">Локальный сервер не отвечает: ${e.message}</span>`;
   }
+}
+
+// ── Импорт файлов (drag&drop -> LOCAL_API/api/process) ─────────
+let currentFiles=[];
+let dateOverrides={}; // { имя_файла: 'YYYY-MM-DD' } — правка даты снэпшота пользователем
+
+const dropEl=document.getElementById('drop');
+const fileInput=document.getElementById('fileInput');
+const importList=document.getElementById('importList');
+const importActions=document.getElementById('importActions');
+
+dropEl.onclick=()=>fileInput.click();
+dropEl.ondragover=e=>{e.preventDefault();dropEl.classList.add('over');};
+dropEl.ondragleave=()=>dropEl.classList.remove('over');
+dropEl.ondrop=e=>{
+  e.preventDefault();
+  dropEl.classList.remove('over');
+  handleFiles(e.dataTransfer.files);
+};
+fileInput.onchange=()=>handleFiles(fileInput.files);
+
+function handleFiles(fileList){
+  currentFiles=Array.from(fileList);
+  dateOverrides={};
+  if(!currentFiles.length)return;
+  previewImport();
+}
+
+async function sendImport(dryRun){
+  const fd=new FormData();
+  currentFiles.forEach(f=>{
+    fd.append('files',f);
+    const override=dateOverrides[f.name];
+    const ms=override?new Date(override+'T12:00:00').getTime():f.lastModified;
+    fd.append('mtimes',ms);
+  });
+  const res=await fetch(`${LOCAL_API}/api/process?dry_run=${dryRun?'1':'0'}`,{method:'POST',body:fd});
+  return res.json();
+}
+
+function renderImport(results,stage){
+  importList.innerHTML='';
+  results.forEach(r=>{
+    const div=document.createElement('div');
+    div.className='import-card';
+    const badge=`<span class="pill ${stage==='preview'?'warn':'ok'}">${stage==='preview'?'ПРЕВЬЮ':'ИМПОРТИРОВАНО'}</span>`;
+    if(r.error){
+      div.innerHTML=`<div class="fname">${r.file} ${badge}</div><div class="err">${r.error}</div>`;
+    }else{
+      let dateLine='';
+      if(r.snapshot_date){
+        if(stage==='preview'){
+          const val=dateOverrides[r.file]||r.snapshot_date;
+          dateLine=`<div class="muted">Дата снэпшота:
+            <input type="date" value="${val}" data-fname="${r.file}" class="dateOverride"
+              style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font:inherit">
+            (по умолчанию — из даты изменения файла)</div>`;
+        }else{
+          dateLine=`<div class="muted">Дата снэпшота: <b>${r.snapshot_date}</b></div>`;
+        }
+      }
+      div.innerHTML=`<div class="fname">${r.file} ${badge}</div>
+        <div class="muted">${r.kind}</div>
+        <div>${r.rows} строк</div>
+        ${dateLine}`;
+    }
+    importList.appendChild(div);
+  });
+  importList.querySelectorAll('.dateOverride').forEach(inp=>{
+    inp.onchange=()=>{dateOverrides[inp.dataset.fname]=inp.value;previewImport();};
+  });
+}
+
+async function previewImport(){
+  importList.innerHTML='<div class="muted">Считаю…</div>';
+  try{
+    const results=await sendImport(true);
+    renderImport(results,'preview');
+    const anyOk=results.some(r=>!r.error&&r.rows>0);
+    importActions.style.display=anyOk?'block':'none';
+  }catch(e){
+    importList.innerHTML=`<span class="err">Локальный сервер не отвечает: ${e.message}</span> — запусти <code>py execution/import_server.py</code> и повтори.`;
+  }
+}
+
+async function doImport(){
+  const btns=importActions.querySelectorAll('button');
+  btns.forEach(b=>b.disabled=true);
+  try{
+    const results=await sendImport(false);
+    renderImport(results,'done');
+    importActions.style.display='none';
+  }catch(e){
+    importList.innerHTML=`<span class="err">Ошибка импорта: ${e.message}</span>`;
+  }finally{
+    btns.forEach(b=>b.disabled=false);
+  }
+}
+
+function resetImport(){
+  currentFiles=[];
+  fileInput.value='';
+  importList.innerHTML='';
+  importActions.style.display='none';
 }
 
 sb.auth.onAuthStateChange((event,session)=>{
