@@ -596,8 +596,13 @@ function buildArticles(rows){
     const dd=r.date.slice(8,10);
     map[k].days[dd]={
       ord:r.orders_qty||0,
-      sls:r.buyouts_qty||0,
-      rev:parseFloat(r.buyouts_sum)||0, // единая логика WB/OZON: выручка по выкупам
+      // sls/rev — ТОЛЬКО подтверждённые продажи (по financial_transactions, за вычетом
+      // возвратов), не dm.buyouts_qty/sum (органика+реклама из воронки/API) — тот может
+      // показывать выкуп раньше, чем появится финансовая проводка по нему, и тогда
+      // "Продажи"/"Выручка"/ЧП на дашборде показывали суммы без единого рубля расходов
+      // рядом. Правило: не может быть продажи без расходов.
+      sls:r.confirmed_qty||0,
+      rev:parseFloat(r.confirmed_sum)||0,
       drr:parseFloat(r.drr)||0,
       spend:parseFloat(r.spend)||0,
       // ad_shows (не dm.shows!) — показы именно от рекламы (ad_stats), в паре с clicks/ctr,
@@ -628,20 +633,23 @@ function buildKPI(rows,mp){
 
   // ── Факт ──
   const ordQty    = si('orders_qty');
-  const buyQty    = si('buyouts_qty');
-  const revenue   = s('buyouts_sum'); // единая логика WB/OZON: выручка по выкупам
+  // buyQty/revenue — ТОЛЬКО подтверждённые продажи (financial_transactions, за вычетом
+  // возвратов), не dm.buyouts_qty/sum — см. коммент у map[k].days[dd] выше: не может
+  // быть продажи без расходов рядом с ней.
+  const buyQty    = si('confirmed_qty');
+  const revenue   = s('confirmed_sum');
   const spend     = s('spend');
   const drr       = revenue>0 ? spend/revenue*100 : 0;
   const buyoutPct = ordQty>0  ? buyQty/ordQty*100 : 0;
   // Себестоимость: vc и fc одинаковы для всех дней одного артикула-месяца,
-  // поэтому sum((vc+fc) × buyouts_qty по дням) = (vc+fc) × total_buyQty — корректно
+  // поэтому sum((vc+fc) × confirmed_qty по дням) = (vc+fc) × total_buyQty — корректно
   const cogs = rows.reduce((a,r)=>{
     const vc=parseFloat(r.plan_variable_cost)||0;
     const fc=parseFloat(r.plan_fixed_cost)||0;
-    return a+(vc+fc)*(parseInt(r.buyouts_qty)||0);
+    return a+(vc+fc)*(parseInt(r.confirmed_qty)||0);
   },0);
   // ЧП по реальной себестоимости (article_costs)
-  const realCogs=rows.reduce((a,r)=>a+(parseFloat(r.cogs)||0)*(parseInt(r.buyouts_qty)||0),0);
+  const realCogs=rows.reduce((a,r)=>a+(parseFloat(r.cogs)||0)*(parseInt(r.confirmed_qty)||0),0);
   // Комиссия+эквайринг+логистика — месячный агрегат, дедуп по артикулу
   const seenNp=new Set();
   let totalComm=0,totalAcq=0,totalLogi=0,totalGross=0;
@@ -985,7 +993,7 @@ async function loadTrendData(){
   const filter=TREND.isCategory
     ?`category=eq.${encodeURIComponent(TREND.category)}`
     :`seller_article=eq.${encodeURIComponent(TREND.sellerArticle)}`;
-  const cols='date,orders_qty,buyouts_qty,buyouts_sum,spend,ad_shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
+  const cols='date,orders_qty,confirmed_qty,confirmed_sum,spend,ad_shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
   const baseUrl=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&${filter}&date=gte.${TREND.dateFrom}&date=lte.${TREND.dateTo}&select=${cols}&order=date`;
   const pageSize=1000;let all=[];let offset=0;
   while(true){
@@ -1007,19 +1015,21 @@ function buildTrendBuckets(){
     if(!byDate[d])byDate[d]={date:d,ord:0,sls:0,rev:0,spend:0,shows:0,clicks:0,comm:0,logi:0,acq:0,ftrev:0,cogsSum:0};
     const o=byDate[d];
     o.ord+=r.orders_qty||0;
-    o.sls+=r.buyouts_qty||0;
-    o.rev+=parseFloat(r.buyouts_sum)||0;
+    // sls/rev — подтверждённые продажи (financial_transactions), не dm.buyouts_qty/sum —
+    // тот же принцип, что в основной таблице (см. коммент у map[k].days[dd]).
+    o.sls+=r.confirmed_qty||0;
+    o.rev+=parseFloat(r.confirmed_sum)||0;
     o.spend+=parseFloat(r.spend)||0;
     o.shows+=r.ad_shows||0; // показы от рекламы (ad_stats), не органическая воронка — см. коммент выше в map[k].days
     o.clicks+=r.clicks||0;
     // Комиссия/логистика/эквайринг привязаны к продаже — тот же принцип, что в основной таблице
-    if((r.buyouts_qty||0)>0){
+    if((r.confirmed_qty||0)>0){
       o.comm+=parseFloat(r.commission_day)||0;
       o.logi+=parseFloat(r.logistics_day)||0;
       o.acq+=parseFloat(r.acquiring_day)||0;
     }
     o.ftrev+=parseFloat(r.ft_rev_day)||0;
-    o.cogsSum+=(parseFloat(r.cogs)||0)*(r.buyouts_qty||0);
+    o.cogsSum+=(parseFloat(r.cogs)||0)*(r.confirmed_qty||0);
   }
   // Заполняем ВСЕ даты диапазона нулями — v_daily_dashboard строится через JOIN из
   // daily_metrics, и день без единой строки (не 0, а прямо отсутствие записи) просто
