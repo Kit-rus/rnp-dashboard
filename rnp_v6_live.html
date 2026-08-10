@@ -596,7 +596,12 @@ function buildArticles(rows){
       rev:parseFloat(r.buyouts_sum)||0, // единая логика WB/OZON: выручка по выкупам
       drr:parseFloat(r.drr)||0,
       spend:parseFloat(r.spend)||0,
-      shows:r.shows||0,
+      // ad_shows (не dm.shows!) — показы именно от рекламы (ad_stats), в паре с clicks/ctr,
+      // которые тоже из ad_stats. dm.shows — органическая воронка (переходы в карточку,
+      // органика+реклама вместе) обновляется только руками из файла "Воронка продаж" и
+      // может протухать месяцами — смешивать её с рекламными кликами в одной метрике
+      // (как было раньше) давало бессмысленный CTR.
+      shows:r.ad_shows||0,
       clicks:r.clicks||0,
       cart:r.cart||0,
       ctr:parseFloat(r.ctr)||0,
@@ -768,7 +773,10 @@ function getV(art,day,metric){
   if(metric==='shows')  return d.shows;
   if(metric==='clicks') return d.clicks;
   if(metric==='cart')   return d.cart;
-  if(metric==='ctr')    return d.shows>0?parseFloat((d.clicks/d.shows*100).toFixed(2)):0;
+  // d.ctr уже посчитан в БД как AVG(ad_stats.ctr) — настоящий CTR по рекламе,
+  // не пересчитываем его тут через d.clicks/d.shows (это давало рассинхрон, когда
+  // shows одно время тянулись из органической воронки, а clicks — из ad_stats).
+  if(metric==='ctr')    return d.ctr||0;
   // Комиссия и логистика привязаны к ПРОДАЖЕ (выкупу), не к заказу — без выкупа в этот
   // день списаний по факту не было, даже если в d.comm/d.logi что-то попало из файла.
   if(metric==='comm')   return d.sls>0?d.comm:0;
@@ -954,7 +962,7 @@ async function loadTrendData(){
   const filter=TREND.isCategory
     ?`category=eq.${encodeURIComponent(TREND.category)}`
     :`seller_article=eq.${encodeURIComponent(TREND.sellerArticle)}`;
-  const cols='date,orders_qty,buyouts_qty,buyouts_sum,spend,shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
+  const cols='date,orders_qty,buyouts_qty,buyouts_sum,spend,ad_shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
   const baseUrl=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&${filter}&date=gte.${TREND.dateFrom}&date=lte.${TREND.dateTo}&select=${cols}&order=date`;
   const pageSize=1000;let all=[];let offset=0;
   while(true){
@@ -979,7 +987,7 @@ function buildTrendBuckets(){
     o.sls+=r.buyouts_qty||0;
     o.rev+=parseFloat(r.buyouts_sum)||0;
     o.spend+=parseFloat(r.spend)||0;
-    o.shows+=r.shows||0;
+    o.shows+=r.ad_shows||0; // показы от рекламы (ad_stats), не органическая воронка — см. коммент выше в map[k].days
     o.clicks+=r.clicks||0;
     // Комиссия/логистика/эквайринг привязаны к продаже — тот же принцип, что в основной таблице
     if((r.buyouts_qty||0)>0){
