@@ -291,6 +291,7 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   <button class="mt"    onclick="sM('clicks',this)">Клики</button>
   <button class="mt"    onclick="sM('ctr',this)">CTR %</button>
   <button class="mt"    onclick="sM('cart',this)">Корзина</button>
+  <button class="mt"    onclick="sM('adOrders',this)">Заказы (реклама)</button>
   <button class="mt"    onclick="sM('comm',this)">Комиссия ₽</button>
   <button class="mt"    onclick="sM('commPct',this)">Комиссия %</button>
   <button class="mt"    onclick="sM('logi',this)">Логистика ₽</button>
@@ -605,6 +606,7 @@ function buildArticles(rows){
       clicks:r.clicks||0,
       cart:r.cart||0,
       ctr:parseFloat(r.ctr)||0,
+      adOrders:r.ad_orders_qty||0, // заказы, атрибутированные рекламе (ad_stats), не путать с ord (весь спрос)
       comm:parseFloat(r.commission_day)||0,
       logi:parseFloat(r.logistics_day)||0,
       acq:parseFloat(r.acquiring_day)||0,
@@ -773,6 +775,7 @@ function getV(art,day,metric){
   if(metric==='shows')  return d.shows;
   if(metric==='clicks') return d.clicks;
   if(metric==='cart')   return d.cart;
+  if(metric==='adOrders')return d.adOrders;
   // d.ctr уже посчитан в БД как AVG(ad_stats.ctr) — настоящий CTR по рекламе,
   // не пересчитываем его тут через d.clicks/d.shows (это давало рассинхрон, когда
   // shows одно время тянулись из органической воронки, а clicks — из ad_stats).
