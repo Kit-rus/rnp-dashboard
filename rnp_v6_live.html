@@ -139,6 +139,9 @@ td.all-cell .pr-row{font-size:10px;gap:2px}
 td.all-cell .pr-lbl{width:26px;font-size:8px}
 td.all-cell .pr-fact{min-width:0;font-size:10px}
 td.all-cell .pr-pct{font-size:8px;padding:0 3px}
+.pr-sep{font-size:8px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.02em;
+  margin-top:3px;padding-top:3px;border-top:1px dashed var(--color-border-tertiary)}
+td.all-cell .pr-sep{font-size:7px;margin-top:2px;padding-top:2px}
 .dv-empty{color:var(--color-text-tertiary);font-size:11px}
 td.off-day{opacity:.3}
 .h1g{background:rgba(29,158,117,.07)}.h2g{background:rgba(29,158,117,.15)}.h3g{background:rgba(29,158,117,.24)}
@@ -604,9 +607,11 @@ function buildArticles(rows){
       // (как было раньше) давало бессмысленный CTR.
       shows:r.ad_shows||0,
       clicks:r.clicks||0,
-      cart:r.cart||0,
+      cart:r.cart||0, // dm.cart — корзина ИТОГО (органика+реклама), из воронки
       ctr:parseFloat(r.ctr)||0,
       adOrders:r.ad_orders_qty||0, // заказы, атрибутированные рекламе (ad_stats), не путать с ord (весь спрос)
+      adCart:r.ad_cart||0,         // корзина ТОЛЬКО от рекламы (ad_stats)
+      totalShows:r.shows||0,       // dm.shows — показы ИТОГО (органика+реклама), из воронки
       comm:parseFloat(r.commission_day)||0,
       logi:parseFloat(r.logistics_day)||0,
       acq:parseFloat(r.acquiring_day)||0,
@@ -820,7 +825,11 @@ function gateDay(d,cogsPerUnit){
   return{ord:d.ord||0,sls,rev:d.rev||0,spend:d.spend||0,
     comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,acq:sls>0?(d.acq||0):0,
     cogs:(cogsPerUnit>0)?cogsPerUnit*sls:0,
-    ftrev:d.ftrev||0};
+    ftrev:d.ftrev||0,
+    // Блок "Реклама" (ad_stats, только рекламный трафик)
+    adShows:d.shows||0,adClicks:d.clicks||0,adCart:d.adCart||0,adOrders:d.adOrders||0,
+    // Блок "Итого" (daily_metrics, органика+реклама вместе, из воронки)
+    totalShows:d.totalShows||0,totalCart:d.cart||0,totalOrders:d.ord||0};
 }
 // Компактный блок со всеми метриками за один день (режим CM==='all').
 // Показываем ВСЕ метрики всегда, без данных — "—" (не скрываем строку).
@@ -833,6 +842,8 @@ function dayAllHTML(o){
   const d=o||{};
   const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
         acq=d.acq||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
+  const adShows=d.adShows||0,adClicks=d.adClicks||0,adCart=d.adCart||0,adOrders=d.adOrders||0;
+  const totalShows=d.totalShows||0,totalCart=d.totalCart||0,totalOrders=d.totalOrders||0;
   const avg=sls>0?Nf(rev/sls)+'₽':'—';
   let np=null,profitPct=null;
   if(rev>0&&cogs>0){
@@ -856,6 +867,15 @@ function dayAllHTML(o){
     +`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${comm>0?Nf(comm)+'₽':'—'}</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Экв</span><span class="pr-fact">${acq>0?Nf(acq)+'₽':'—'}</span>${acqPct?`<span class="pr-pct" ${warn}>${acqPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${logi>0?Nf(logi)+'₽':'—'}</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}</span>`:''}</div>`
+    +`<div class="pr-sep">Реклама</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Показы</span><span class="pr-fact">${adShows>0?Fk(adShows):'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Клики</span><span class="pr-fact">${adClicks>0?Nf(adClicks):'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Корзина</span><span class="pr-fact">${adCart>0?Nf(adCart):'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${adOrders>0?Nf(adOrders):'—'}</span></div>`
+    +`<div class="pr-sep">Итого (реклама+органика)</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Показы</span><span class="pr-fact">${totalShows>0?Fk(totalShows):'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Корзина</span><span class="pr-fact">${totalCart>0?Nf(totalCart):'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${totalOrders>0?Nf(totalOrders):'—'}</span></div>`
     +'</div>';
 }
 function heatCls(v,metric,mn,mx){
