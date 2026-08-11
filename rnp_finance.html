@@ -514,7 +514,10 @@ function renderTable(){
     const catQtyMatched = byCatInt('qty_matched');
     const catAvgOur = {}, catAvgClient = {}, catSpp = {};
     for(const c of catNames){
-      catAvgOur[c] = catKey(c,'revenue').map((v,i)=>catInt(c,'buyouts_qty')[i]>0 ? v/catInt(c,'buyouts_qty')[i] : null);
+      // Та же выборка, что catAvgClient (client_price IS NOT NULL) — иначе "наш чек" и "чек
+      // клиента" считаются по разным подмножествам строк и до-СПП может выглядеть ниже
+      // после-СПП (см. коммент у avgCheckOur выше — тот же баг, но на уровне категорий).
+      catAvgOur[c] = catQtyMatched[c].map((v,i)=>v>0 ? catRevMatched[c][i]/v : null);
       catAvgClient[c] = catQtyMatched[c].map((v,i)=>v>0 ? catRevAfter[c][i]/v : null);
       catSpp[c] = catRevMatched[c].map((v,i)=>v>0 ? (v-catRevAfter[c][i])/v*100 : null);
     }
