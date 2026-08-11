@@ -621,6 +621,7 @@ function buildArticles(rows){
       comm:parseFloat(r.commission_day)||0,
       logi:parseFloat(r.logistics_day)||0,
       acq:parseFloat(r.acquiring_day)||0,
+      pen:parseFloat(r.penalties_day)||0, // штрафы — раньше нигде не показывались
       ftrev:parseFloat(r.ft_rev_day)||0,
       profit:0,
     };
@@ -833,6 +834,7 @@ function gateDay(d,cogsPerUnit){
   const sls=d.sls||0;
   return{ord:d.ord||0,sls,rev:d.rev||0,ret:d.ret||0,spend:d.spend||0,
     comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,acq:sls>0?(d.acq||0):0,
+    pen:d.pen||0, // штраф не гейтим по sls — может быть без продажи в этот день (как ret)
     cogs:(cogsPerUnit>0)?cogsPerUnit*sls:0,
     ftrev:d.ftrev||0,
     // Блок "Реклама" (ad_stats, только рекламный трафик)
@@ -850,13 +852,13 @@ function gateDay(d,cogsPerUnit){
 function dayAllHTML(o){
   const d=o||{};
   const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,ret=d.ret||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
-        acq=d.acq||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
+        acq=d.acq||0,pen=d.pen||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
   const adShows=d.adShows||0,adClicks=d.adClicks||0,adCart=d.adCart||0,adOrders=d.adOrders||0;
   const totalShows=d.totalShows||0,totalCart=d.totalCart||0,totalOrders=d.totalOrders||0;
   const avg=sls>0?Nf(rev/sls)+'₽':'—';
   let np=null,profitPct=null;
   if(rev>0&&cogs>0){
-    np=rev-cogs-spend-comm-logi-acq;
+    np=rev-cogs-spend-comm-logi-acq-pen;
     profitPct=np/rev*100;
   }
   const drrPct=rev>0&&spend>0?(spend/rev*100).toFixed(1)+'%':null;
@@ -877,6 +879,7 @@ function dayAllHTML(o){
     +`<div class="pr-row"><span class="pr-lbl">Ком</span><span class="pr-fact">${comm>0?Nf(comm)+'₽':'—'}</span>${commPct?`<span class="pr-pct" ${warn}>${commPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Экв</span><span class="pr-fact">${acq>0?Nf(acq)+'₽':'—'}</span>${acqPct?`<span class="pr-pct" ${warn}>${acqPct}</span>`:''}</div>`
     +`<div class="pr-row"><span class="pr-lbl">Лог</span><span class="pr-fact">${logi>0?Nf(logi)+'₽':'—'}</span>${logiPct?`<span class="pr-pct" ${warn}>${logiPct}</span>`:''}</div>`
+    +`<div class="pr-row"><span class="pr-lbl">Штраф</span><span class="pr-fact nv">${pen>0?Nf(pen)+'₽':'—'}</span></div>`
     +`<div class="pr-sep">Реклама</div>`
     +`<div class="pr-row"><span class="pr-lbl">Показы</span><span class="pr-fact">${adShows>0?Fk(adShows):'—'}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Клики</span><span class="pr-fact">${adClicks>0?Nf(adClicks):'—'}</span></div>`
