@@ -283,7 +283,7 @@ async function loadABC(){
       const key=groupKey(r);
       if(!agg[key]) agg[key]={
         name:key, orders:0, buyouts:0, revenue:0, cogs:0,
-        commission:0, acquiring:0, logistics:0, spend:0,
+        commission:0, acquiring:0, logistics:0, spend:0, storage:0,
       };
       const g=agg[key];
       g.orders   += parseInt(r.orders_qty)||0;
@@ -297,6 +297,7 @@ async function loadABC(){
       g.acquiring  += parseFloat(r.acquiring_day)||0;
       g.logistics  += parseFloat(r.logistics_day)||0;
       g.spend      += parseFloat(r.spend)||0;
+      g.storage    += parseFloat(r.storage_day)||0;
     }
 
     // Классическая ABC-классификация (A/B/C по накопленной доле выручки 80/95%) убрана —
@@ -308,7 +309,7 @@ async function loadABC(){
     for(const g of list){
       g.share = totalRevenue>0 ? g.revenue/totalRevenue*100 : 0;
       g.grossProfit = g.revenue - g.cogs;
-      g.netProfit = g.grossProfit - g.commission - g.acquiring - g.logistics - g.spend;
+      g.netProfit = g.grossProfit - g.commission - g.acquiring - g.logistics - g.spend - g.storage;
       g.avgCheck = g.buyouts>0 ? g.revenue/g.buyouts : 0;
       g.buyoutPct = g.orders>0 ? g.buyouts/g.orders*100 : 0;
     }
@@ -320,7 +321,7 @@ async function loadABC(){
     let h='<table><tr>'+
       '<th>Название</th><th>Заказы</th><th>Продажи</th><th>Выкуп %</th>'+
       '<th>Выручка до СПП</th><th>Доля %</th><th>Ср.чек до СПП</th>'+
-      '<th>С/С</th><th>Вал.приб</th><th>Комиссия</th><th>Логистика</th><th>Реклама</th><th>ЧП</th><th>ЧП %</th></tr>';
+      '<th>С/С</th><th>Вал.приб</th><th>Комиссия</th><th>Логистика</th><th>Хранение</th><th>Реклама</th><th>ЧП</th><th>ЧП %</th></tr>';
     for(const g of list){
       const npCls = g.netProfit<0?'neg':'pos';
       h+=`<tr>`+
@@ -329,7 +330,7 @@ async function loadABC(){
          `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
          `<td>${Nf(g.avgCheck)}₽</td>`+
          `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
-         `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logistics+g.acquiring)}₽</td><td>${Nf(g.spend)}₽</td>`+
+         `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logistics+g.acquiring)}₽</td><td>${Nf(g.storage)}₽</td><td>${Nf(g.spend)}₽</td>`+
          `<td class="${npCls}">${Nf(g.netProfit)}₽</td><td class="${npCls}">${g.revenue>0?(g.netProfit/g.revenue*100).toFixed(1):0}%</td>`+
          `</tr>`;
     }
