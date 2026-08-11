@@ -603,6 +603,7 @@ function buildArticles(rows){
       // рядом. Правило: не может быть продажи без расходов.
       sls:r.confirmed_qty||0,
       rev:parseFloat(r.confirmed_sum)||0,
+      ret:parseFloat(r.returned_sum)||0, // возврат ОТДЕЛЬНО, со знаком минус — иначе тонет внутри rev
       drr:parseFloat(r.drr)||0,
       spend:parseFloat(r.spend)||0,
       // ad_shows (не dm.shows!) — показы именно от рекламы (ad_stats), в паре с clicks/ctr,
@@ -830,7 +831,7 @@ function fmtV(v,metric){
 function gateDay(d,cogsPerUnit){
   if(!d)return null;
   const sls=d.sls||0;
-  return{ord:d.ord||0,sls,rev:d.rev||0,spend:d.spend||0,
+  return{ord:d.ord||0,sls,rev:d.rev||0,ret:d.ret||0,spend:d.spend||0,
     comm:sls>0?(d.comm||0):0,logi:sls>0?(d.logi||0):0,acq:sls>0?(d.acq||0):0,
     cogs:(cogsPerUnit>0)?cogsPerUnit*sls:0,
     ftrev:d.ftrev||0,
@@ -848,7 +849,7 @@ function gateDay(d,cogsPerUnit){
 // показывал ЧП 100% при реальной марже ~2-10%).
 function dayAllHTML(o){
   const d=o||{};
-  const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
+  const ord=d.ord||0,sls=d.sls||0,rev=d.rev||0,ret=d.ret||0,spend=d.spend||0,comm=d.comm||0,logi=d.logi||0,
         acq=d.acq||0,cogs=d.cogs||0,ftrev=d.ftrev||0;
   const adShows=d.adShows||0,adClicks=d.adClicks||0,adCart=d.adCart||0,adOrders=d.adOrders||0;
   const totalShows=d.totalShows||0,totalCart=d.totalCart||0,totalOrders=d.totalOrders||0;
@@ -869,6 +870,7 @@ function dayAllHTML(o){
     +`<div class="pr-row"><span class="pr-lbl">Зак</span><span class="pr-fact">${Nf(ord)}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Прод</span><span class="pr-fact">${Nf(sls)}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Выр</span><span class="pr-fact">${rev>0?Nf(rev)+'₽':'—'}</span></div>`
+    +`<div class="pr-row"><span class="pr-lbl">Возврат</span><span class="pr-fact nv">${ret!==0?Nf(ret)+'₽':'—'}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">Чек</span><span class="pr-fact">${avg}</span></div>`
     +`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${np===null?'—':Nf(np)+'₽'}</span>${npPctBadge}</div>`
     +`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${spend>0?Nf(spend)+'₽':'—'}</span>${drrPct?`<span class="pr-pct" ${warn}>${drrPct}</span>`:''}</div>`
