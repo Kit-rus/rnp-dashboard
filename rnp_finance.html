@@ -495,12 +495,18 @@ function renderTable(){
 
     // ── СПП / чек / выкупаемость (нужны заранее — идут в блок "Объём") ──
     const buyoutPct = ordersInt.map((o,i)=>o>0?(buyoutsInt[i]/o*100):null);
-    const avgCheckOur = revenue.map((v,i)=>buyoutsInt[i]>0?v/buyoutsInt[i]:null);
     const revAfterSpp = num('revenue_after_spp');
-    const revMatched   = num('revenue_matched');
+    const revMatched   = num('revenue_matched'); // выручка ДО СПП, но ТОЛЬКО по строкам, где есть и client_price
     const qtyMatched    = num('qty_matched');
     const sppPct = revMatched.map((v,i)=>v>0?(v-revAfterSpp[i])/v*100:null);
     const avgCheckClient = qtyMatched.map((v,i)=>v>0?revAfterSpp[i]/v:null);
+    // avgCheckOur — ТА ЖЕ выборка (qtyMatched/revMatched), что и avgCheckClient, а не вся
+    // buyoutsInt/revenue. client_price сейчас есть не у всех строк 'Продажа' (только там, где
+    // грузили файл — API-путь его раньше вообще не заполнял, уже почищено, но задним числом
+    // не переспинкано). Если делить "наш чек" на ВСЮ выборку, а "чек клиента" — на узкую
+    // подвыборку с client_price, получаются два разных по составу числа, и до-СПП может
+    // выглядеть НИЖЕ после-СПП чисто из-за разных знаменателей — не сама СПП тут ни при чём.
+    const avgCheckOur = qtyMatched.map((v,i)=>v>0?revMatched[i]/v:null);
 
     const catRevenue = byCat('revenue'); // база для %% строк-категорий (своя выручка, не общая по МП)
     const catRevAfter = byCat('revenue_after_spp');
