@@ -120,7 +120,7 @@ td.lbl2{text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis}
 
   <!-- ── ABC-анализ ──────────────────────────────────────── -->
   <div id="view-abc" class="hidden-view">
-    <div class="sub" style="margin-top:0">Классификация по выручке: сортировка по убыванию, накопительный % — A ≤80%, B ≤95%, C ≤100%.</div>
+    <div class="sub" style="margin-top:0">Сортировка по убыванию выручки. Категоризация A/B/C временно отключена — будет заполнена своими данными.</div>
     <div class="mptabs" style="align-items:center">
       <label class="muted" style="font-size:12px">С <input type="date" id="d-from"></label>
       <label class="muted" style="font-size:12px">по <input type="date" id="d-to"></label>
@@ -245,6 +245,22 @@ function colorModel(sellerArticle){
   return sellerArticle;
 }
 
+// Пагинация: PostgREST молча режет ответ до ~1000 строк, даже если в URL стоит limit=20000
+// (см. HANDOFF.md) — за месяц по всем артикулам это легко десятки тысяч строк. Без этого
+// ABC терял артикулы/дни за хвостом выборки и занижал выручку. Тот же приём, что sbGetAll
+// в tech_status.html/loadMonthData в rnp_v6_live.html.
+async function sbGetAllABC(path,pageSize=1000){
+  const sep=path.includes('?')?'&':'?';
+  let all=[],offset=0;
+  while(true){
+    const rows=await sbGet(`${path}${sep}limit=${pageSize}&offset=${offset}`);
+    all=all.concat(rows);
+    if(rows.length<pageSize)break;
+    offset+=pageSize;
+  }
+  return all;
+}
+
 async function loadABC(){
   const from=document.getElementById('d-from').value;
   const to=document.getElementById('d-to').value;
@@ -254,7 +270,7 @@ async function loadABC(){
   document.getElementById('abc-tbl').innerHTML='<div class="loading">Загрузка…</div>';
   document.getElementById('abc-summary').innerHTML='';
   try{
-    const rows=await sbGet(`v_daily_dashboard?marketplace=eq.${MP}&date=gte.${from}&date=lte.${to}&limit=20000`);
+    const rows=await sbGetAllABC(`v_daily_dashboard?marketplace=eq.${MP}&date=gte.${from}&date=lte.${to}`);
     if(!rows.length){
       document.getElementById('abc-tbl').innerHTML='<span class="muted">Нет данных за период.</span>';
       return;
@@ -266,57 +282,51 @@ async function loadABC(){
     for(const r of rows){
       const key=groupKey(r);
       if(!agg[key]) agg[key]={
-        name:key, orders:0, buyouts:0, returns:0, revenue:0, cogs:0,
+        name:key, orders:0, buyouts:0, revenue:0, cogs:0,
         commission:0, acquiring:0, logistics:0, spend:0,
       };
       const g=agg[key];
       g.orders   += parseInt(r.orders_qty)||0;
-      g.buyouts  += parseInt(r.buyouts_qty)||0;
-      g.returns  += parseInt(r.returns_qty)||0;
+      // Продажи/себестоимость/ср.чек — ТОЛЬКО подтверждённые (financial_transactions), не
+      // dm.buyouts_qty (органика+реклама из воронки/API) — тот же принцип, что в
+      // rnp_v6_live.html: не может быть продажи без расходов рядом с ней.
+      g.buyouts  += parseInt(r.confirmed_qty)||0;
       g.revenue  += parseFloat(r.ft_rev_day)||0;
-      g.cogs     += (parseFloat(r.cogs)||0) * (parseInt(r.buyouts_qty)||0);
+      g.cogs     += (parseFloat(r.cogs)||0) * (parseInt(r.confirmed_qty)||0);
       g.commission += parseFloat(r.commission_day)||0;
       g.acquiring  += parseFloat(r.acquiring_day)||0;
       g.logistics  += parseFloat(r.logistics_day)||0;
       g.spend      += parseFloat(r.spend)||0;
     }
 
+    // Классическая ABC-классификация (A/B/C по накопленной доле выручки 80/95%) убрана —
+    // будет заменена своей категоризацией. Пока просто сортировка по выручке.
     let list=Object.values(agg).filter(g=>g.orders>0||g.buyouts>0||g.revenue>0);
     list.sort((a,b)=>b.revenue-a.revenue);
 
     const totalRevenue=list.reduce((s,g)=>s+g.revenue,0);
-    let cum=0;
     for(const g of list){
       g.share = totalRevenue>0 ? g.revenue/totalRevenue*100 : 0;
-      cum += g.share;
-      g.cumShare = cum;
-      g.abc = cum<=80 ? 'A' : cum<=95 ? 'B' : 'C';
       g.grossProfit = g.revenue - g.cogs;
       g.netProfit = g.grossProfit - g.commission - g.acquiring - g.logistics - g.spend;
       g.avgCheck = g.buyouts>0 ? g.revenue/g.buyouts : 0;
       g.buyoutPct = g.orders>0 ? g.buyouts/g.orders*100 : 0;
     }
 
-    const groups={A:{n:0,rev:0},B:{n:0,rev:0},C:{n:0,rev:0}};
-    for(const g of list){ groups[g.abc].n++; groups[g.abc].rev+=g.revenue; }
-    let sh='';
-    for(const k of ['A','B','C']){
-      sh+=`<div class="sumcard"><div class="v"><span class="badge ${k}">${k}</span> ${groups[k].n}</div><div class="l">${Nf(groups[k].rev)}₽ (${totalRevenue>0?(groups[k].rev/totalRevenue*100).toFixed(1):0}%)</div></div>`;
-    }
-    sh+=`<div class="sumcard"><div class="v">${Nf(totalRevenue)}₽</div><div class="l">Итого выручка</div></div>`;
-    document.getElementById('abc-summary').innerHTML=sh;
+    document.getElementById('abc-summary').innerHTML=
+      `<div class="sumcard"><div class="v">${Nf(totalRevenue)}₽</div><div class="l">Итого выручка до СПП</div></div>`+
+      `<div class="sumcard"><div class="v">${list.length}</div><div class="l">Позиций</div></div>`;
 
     let h='<table><tr>'+
-      '<th>ABC</th><th>Название</th><th>Заказы</th><th>Продажи</th><th>Выкуп %</th>'+
-      '<th>Выручка</th><th>Доля %</th><th>Накоп %</th><th>Ср.чек</th>'+
+      '<th>Название</th><th>Заказы</th><th>Продажи</th><th>Выкуп %</th>'+
+      '<th>Выручка до СПП</th><th>Доля %</th><th>Ср.чек до СПП</th>'+
       '<th>С/С</th><th>Вал.приб</th><th>Комиссия</th><th>Логистика</th><th>Реклама</th><th>ЧП</th><th>ЧП %</th></tr>';
     for(const g of list){
       const npCls = g.netProfit<0?'neg':'pos';
-      h+=`<tr class="group-${g.abc}">`+
-         `<td><span class="badge ${g.abc}">${g.abc}</span></td>`+
+      h+=`<tr>`+
          `<td class="lbl2" title="${g.name}">${g.name}</td>`+
          `<td>${g.orders}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
-         `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td><td>${g.cumShare.toFixed(1)}%</td>`+
+         `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
          `<td>${Nf(g.avgCheck)}₽</td>`+
          `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
          `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logistics+g.acquiring)}₽</td><td>${Nf(g.spend)}₽</td>`+
