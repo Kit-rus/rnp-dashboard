@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Агент контроля качества — РНП</title>
+<style>
+:root{
+  --bg:#0f1115;--card:#171a21;--border:#262b36;--text:#e6e9ef;--text2:#9aa3b2;
+  --ok:#3fb668;--warn:#e0a83c;--err:#e05c5c;--accent:#4f8cff;
+}
+@media (prefers-color-scheme: light){
+  :root{--bg:#f5f6f8;--card:#fff;--border:#e2e5ea;--text:#1a1d23;--text2:#6b7280;}
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:13px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;padding:20px}
+.w{max-width:1000px;margin:0 auto}
+h1{font-size:18px;margin-bottom:4px}
+.sub{color:var(--text2);font-size:12px;margin-bottom:20px}
+a.back{color:var(--accent);text-decoration:none;font-size:12px}
+h2{font-size:14px;margin:24px 0 10px;display:flex;align-items:center;gap:8px}
+.count{background:var(--border);color:var(--text2);border-radius:9px;padding:1px 8px;font-size:11px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto}
+.loading{color:var(--text2);padding:30px;text-align:center}
+.finding{border-bottom:1px solid var(--border);padding:10px 0}
+.finding:last-child{border-bottom:none}
+.frow{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.pill{display:inline-block;padding:1px 8px;border-radius:9px;font-size:11px;border:1px solid var(--border);flex-shrink:0}
+.pill.error{color:var(--err);border-color:var(--err)}
+.pill.warn{color:var(--warn);border-color:var(--warn)}
+.pill.info{color:var(--text2)}
+.summary{font-weight:600}
+.meta{color:var(--text2);font-size:11px;margin-left:auto;white-space:nowrap}
+.details{color:var(--text2);font-size:12px;margin-top:4px;white-space:pre-wrap}
+.fixed{color:var(--ok);font-size:11px;margin-top:4px}
+.empty{color:var(--text2);padding:20px;text-align:center}
+select,button{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;
+  padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer}
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="w">
+  <a class="back" href="rnp_v6_live.html">← Дашборд</a>
+  <h1>🤖 Агент контроля качества</h1>
+  <div class="sub">Находки ИИ-агента (Claude API) — проверяет внутреннюю консистентность данных после каждой синхронизации и новые файлы перед импортом. Не эвристики по расписанию — реальный анализ сводки на каждый прогон.</div>
+
+  <div class="filters">
+    <select id="f-severity" onchange="render()">
+      <option value="">Все severity</option>
+      <option value="error">Только error</option>
+      <option value="warn">Только warn</option>
+      <option value="info">Только info</option>
+    </select>
+    <select id="f-type" onchange="render()">
+      <option value="">Все типы</option>
+      <option value="consistency">consistency</option>
+      <option value="file_anomaly">file_anomaly</option>
+    </select>
+    <button onclick="load()">↻ Обновить</button>
+  </div>
+
+  <h2>Находки <span class="count" id="cnt">…</span></h2>
+  <div class="card" id="findings"><div class="loading">Загрузка…</div></div>
+</div>
+
+<script>
+const SB_URL='https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON='sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+
+async function sbGet(path){
+  const r=await fetch(`${SB_URL}/rest/v1/${path}`,{headers:{
+    'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+let ALL=[];
+
+async function load(){
+  document.getElementById('findings').innerHTML='<div class="loading">Загрузка…</div>';
+  try{
+    ALL=await sbGet('audit_findings?select=*&order=run_at.desc&limit=200');
+    render();
+  }catch(e){
+    document.getElementById('findings').innerHTML=`<div class="empty">Ошибка загрузки: ${e.message}. Таблица audit_findings ещё не создана? Прогони миграцию в Supabase.</div>`;
+  }
+}
+
+function fmtDate(iso){
+  return new Date(iso).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+function render(){
+  const sevF=document.getElementById('f-severity').value;
+  const typeF=document.getElementById('f-type').value;
+  let list=ALL;
+  if(sevF) list=list.filter(f=>f.severity===sevF);
+  if(typeF) list=list.filter(f=>f.check_type===typeF);
+
+  document.getElementById('cnt').textContent=list.length;
+
+  if(!list.length){
+    document.getElementById('findings').innerHTML='<div class="empty">Находок нет — либо всё чисто, либо агент ещё не запускался (нужен ANTHROPIC_API_KEY в .env и хотя бы один прогон fetch_wb_api.py/fetch_ozon_api.py/parse_wb.py/parse_ozon.py).</div>';
+    return;
+  }
+
+  document.getElementById('findings').innerHTML=list.map(f=>{
+    const fixed = f.auto_fixed ? `<div class="fixed">✓ авто-исправлено (${f.fix_action||'?'})</div>` : '';
+    let details='';
+    try{
+      const d=JSON.parse(f.details||'{}');
+      details=d.details||'';
+    }catch(e){}
+    return `<div class="finding">
+      <div class="frow">
+        <span class="pill ${f.severity}">${f.severity}</span>
+        <span class="pill">${f.check_type}</span>
+        <span class="summary">${f.summary}</span>
+        <span class="meta">${f.trigger_source||'?'} · ${fmtDate(f.run_at)}</span>
+      </div>
+      ${details?`<div class="details">${details}</div>`:''}
+      ${fixed}
+    </div>`;
+  }).join('');
+}
+
+load();
+</script>
+</body>
+</html>
