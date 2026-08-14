@@ -62,6 +62,10 @@ select,button{background:var(--card);color:var(--text);border:1px solid var(--bo
 
   <h2>Находки <span class="count" id="cnt">…</span></h2>
   <div class="card" id="findings"><div class="loading">Загрузка…</div></div>
+
+  <h2>Журнал агентов <span class="count" id="cnt-rep">…</span></h2>
+  <div class="sub">Опер Дир → Фин Дир → Фин Менеджер, отчёты идут в обратную сторону.</div>
+  <div class="card" id="reports"><div class="loading">Загрузка…</div></div>
 </div>
 
 <script>
@@ -76,15 +80,46 @@ async function sbGet(path){
 }
 
 let ALL=[];
+let REPORTS=[];
+
+const AGENT_RU={oper_director:'Опер Дир',fin_director:'Фин Дир',fin_manager:'Фин Менеджер'};
 
 async function load(){
   document.getElementById('findings').innerHTML='<div class="loading">Загрузка…</div>';
+  document.getElementById('reports').innerHTML='<div class="loading">Загрузка…</div>';
   try{
     ALL=await sbGet('audit_findings?select=*&order=run_at.desc&limit=200');
     render();
   }catch(e){
     document.getElementById('findings').innerHTML=`<div class="empty">Ошибка загрузки: ${e.message}. Таблица audit_findings ещё не создана? Прогони миграцию в Supabase.</div>`;
   }
+  try{
+    REPORTS=await sbGet('agent_reports?select=*&order=reported_at.desc&limit=100');
+    renderReports();
+  }catch(e){
+    document.getElementById('reports').innerHTML=`<div class="empty">Ошибка загрузки: ${e.message}. Таблица agent_reports ещё не создана? Прогони миграцию в Supabase.</div>`;
+  }
+}
+
+function renderReports(){
+  document.getElementById('cnt-rep').textContent=REPORTS.length;
+  if(!REPORTS.length){
+    document.getElementById('reports').innerHTML='<div class="empty">Пока пусто — иерархия агентов ещё не запускалась (py agent_oper_director.py --update wb --days 1).</div>';
+    return;
+  }
+  document.getElementById('reports').innerHTML=REPORTS.map(r=>{
+    const from=AGENT_RU[r.from_agent]||r.from_agent;
+    const to=AGENT_RU[r.to_agent]||r.to_agent;
+    const arrow = r.from_agent===r.to_agent ? '' : ` → ${to}`;
+    return `<div class="finding">
+      <div class="frow">
+        <span class="pill ${r.status==='error'?'error':r.status==='warn'?'warn':'info'}">${r.status}</span>
+        <span class="summary">${from}${arrow}: ${r.task}</span>
+        <span class="meta">${fmtDate(r.reported_at)}</span>
+      </div>
+      ${r.message?`<div class="details">${r.message}</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 function fmtDate(iso){
