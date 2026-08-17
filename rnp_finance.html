@@ -484,7 +484,8 @@ function renderTable(){
     const acquiring   = num('acquiring_sum');
     const logiTo      = num('logistics_to');
     const logiFrom     = num('logistics_from');
-    const m2 = m1.map((v,i)=>v-commission[i]-acquiring[i]-logiTo[i]-logiFrom[i]);
+    const storage      = num('storage');
+    const m2 = m1.map((v,i)=>v-commission[i]-acquiring[i]-logiTo[i]-logiFrom[i]-storage[i]);
     const adSpend  = num('ad_spend');
     const selfBuy  = num('self_buy');
     const bloggers = num('bloggers');
@@ -550,6 +551,7 @@ function renderTable(){
     h+=metricBlock('Эквайринг', acquiring, byCat('acquiring_sum'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Логистика до клиента', logiTo, byCat('logistics_to'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Логистика от клиента (возвраты)', logiFrom, byCat('logistics_from'), {pctBase:revenue, pctBaseCat:catRevenue});
+    h+=metricBlock('Хранение', storage, byCat('storage'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Маржинальная прибыль (М2)', m2, null, {pctBase:revenue, signColor:true});
 
     // ── 4. Продвижение ──
