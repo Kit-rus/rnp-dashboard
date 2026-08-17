@@ -64,7 +64,7 @@ select,button{background:var(--card);color:var(--text);border:1px solid var(--bo
   <div class="card" id="findings"><div class="loading">Загрузка…</div></div>
 
   <h2>Журнал агентов <span class="count" id="cnt-rep">…</span></h2>
-  <div class="sub">Опер Дир → Фин Дир → Фин Менеджер, отчёты идут в обратную сторону.</div>
+  <div class="sub">Опер Дир → Фин Дир → Фин Менеджер → WB/OZON-менеджер; Менеджер по С/С и Менеджер по рекламе репортят Фин Диру напрямую; Аудитор — независимая ревизия, репортит Опер Диру в обход Фин Дира. Отчёты идут снизу вверх.</div>
   <div class="card" id="reports"><div class="loading">Загрузка…</div></div>
 </div>
 
@@ -82,7 +82,9 @@ async function sbGet(path){
 let ALL=[];
 let REPORTS=[];
 
-const AGENT_RU={oper_director:'Опер Дир',fin_director:'Фин Дир',fin_manager:'Фин Менеджер'};
+const AGENT_RU={oper_director:'Опер Дир',fin_director:'Фин Дир',fin_manager:'Фин Менеджер',
+  wb_manager:'WB-менеджер',ozon_manager:'OZON-менеджер',cogs_manager:'Менеджер по С/С',
+  ad_manager:'Менеджер по рекламе',auditor:'Аудитор'};
 
 async function load(){
   document.getElementById('findings').innerHTML='<div class="loading">Загрузка…</div>';
