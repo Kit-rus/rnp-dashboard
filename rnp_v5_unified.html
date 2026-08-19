@@ -173,6 +173,11 @@ td.off-day{opacity:.3}
 .h1r{background:rgba(226,75,74,.07)}.h2r{background:rgba(226,75,74,.15)}.h3r{background:rgba(226,75,74,.24)}
 td.spark-td{padding:2px 5px!important}
 td.wk-sep,th.wk-sep{border-left:1px solid var(--color-border-secondary)!important}
+/* Столбец "Итого нед." — лёгкий фон, чтобы отличать от обычных дневных столбцов
+   (и чтобы было видно на глаз, где неделя свёрнута до одного столбца). */
+td.wk-total,th.wk-total-hdr{background:var(--color-background-secondary)}
+tr.art-row td.wk-total{font-weight:600}
+th.wk-total-hdr{font-size:9px;color:var(--color-text-tertiary)}
 tr.total-row td{font-weight:500;border-top:1.5px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:11px}
 tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-background-secondary)}
 .pv{color:var(--color-text-success)}.nv{color:var(--color-text-danger)}
@@ -1384,6 +1389,105 @@ function toggleCat(catId){
   if(icon)icon.textContent=collapsed?'▶':'▼';
 }
 
+// ─── Столбец "Итого нед." + сворачивание дневных столбцов недели ──────────
+// WEEK_COLLAPSED[wk]=true -> показываем ТОЛЬКО столбец с итогом недели, дневные
+// столбцы скрыты. Меняет структуру шапки/колспанов -> проще перерисовать всю
+// таблицу (render()), чем патчить colspan+display по месту, как toggleCat.
+const WEEK_COLLAPSED={};
+function toggleWeek(wk){
+  WEEK_COLLAPSED[wk]=!WEEK_COLLAPSED[wk];
+  render();
+}
+// Точные суммы (не %) по списку артикулов за произвольный список дней (день/неделя/
+// период — тот же принцип, что artPre/catFactXXX выше, только обобщённо на любой
+// список дней, не только "весь видимый период"). Нужно для столбца "Итого нед.".
+function calcStats(arts,dayList){
+  let ord=0,sls=0,rev=0,spend=0,comm=0,acq=0,logi=0,gross=0,cogsTotal=0,shows=0,clicks=0,cart=0,adOrders=0;
+  for(const art of arts){
+    let artSls=0;
+    for(const day of dayList){
+      if(day.off)continue;
+      ord+=getV(art,day,'orders');
+      const s=getV(art,day,'sales'); sls+=s; artSls+=s;
+      rev+=getV(art,day,'revenue');
+      spend+=getV(art,day,'spend');
+      comm+=getV(art,day,'comm');
+      acq+=getV(art,day,'acq');
+      logi+=getV(art,day,'logi');
+      shows+=getV(art,day,'shows');
+      clicks+=getV(art,day,'clicks');
+      cart+=getV(art,day,'cart');
+      adOrders+=getV(art,day,'adOrders');
+      const dd=art.days[day.d];
+      gross+=(dd?(dd.ftrev||0):0);
+    }
+    cogsTotal+=art.cogs*artSls;
+  }
+  const drr=rev>0?parseFloat((spend/rev*100).toFixed(1)):0;
+  const commPct=gross>0?parseFloat((comm/gross*100).toFixed(1)):0;
+  const logiPct=gross>0?parseFloat((logi/gross*100).toFixed(1)):0;
+  const ctr=shows>0?parseFloat((clicks/shows*100).toFixed(2)):0;
+  let profit=0;
+  if(rev>0&&cogsTotal>0)profit=parseFloat(((rev-cogsTotal-spend-comm-acq-logi)/rev*100).toFixed(1));
+  return{ord,sls,rev,spend,comm,acq,logi,shows,clicks,cart,adOrders,drr,commPct,logiPct,ctr,profit};
+}
+function statValueForMetric(s,metric){
+  if(metric==='orders')return s.ord;
+  if(metric==='sales')return s.sls;
+  if(metric==='revenue')return s.rev;
+  if(metric==='spend')return s.spend;
+  if(metric==='shows')return s.shows;
+  if(metric==='clicks')return s.clicks;
+  if(metric==='cart')return s.cart;
+  if(metric==='adOrders')return s.adOrders;
+  if(metric==='comm')return s.comm;
+  if(metric==='logi')return s.logi;
+  if(metric==='drr')return s.drr;
+  if(metric==='ctr')return s.ctr;
+  if(metric==='commPct')return s.commPct;
+  if(metric==='logiPct')return s.logiPct;
+  if(metric==='profit')return s.profit;
+  return 0;
+}
+// То же самое, но для режима "Все" — возвращает gateDay-образный объект (для
+// compactDayValuesHTML), суммированный по артикулам и дням недели. Остаток (stockQty) —
+// НЕ сумма (см. cumMode:'last' у METRIC_ROWS) — последнее известное значение за
+// неделю, просуммированное по артикулам на ТУ дату.
+function calcGatedWeekCum(arts,weekDays){
+  const o={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0,
+    adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0,stockQty:0};
+  for(const art of arts){
+    for(const day of weekDays){
+      if(day.off)continue;
+      const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);
+      if(!d)continue;
+      o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.ret+=d.ret;o.spend+=d.spend;
+      o.comm+=d.comm;o.logi+=d.logi;o.acq+=d.acq;o.cogs+=d.cogs;o.ftrev+=d.ftrev;o.mrev+=d.mrev;
+      o.adShows+=d.adShows;o.adClicks+=d.adClicks;o.adCart+=d.adCart;o.adOrders+=d.adOrders;
+      o.totalShows+=d.totalShows;o.totalCart+=d.totalCart;o.totalOrders+=d.totalOrders;
+    }
+  }
+  for(let i=weekDays.length-1;i>=0;i--){
+    const day=weekDays[i];
+    if(day.off)continue;
+    let sum=0,found=false;
+    for(const art of arts){
+      const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);
+      if(d){found=true;sum+=d.stockQty||0;}
+    }
+    if(found){o.stockQty=sum;break;}
+  }
+  return o;
+}
+// Ярлык кнопки в шапке недели — свернуть/развернуть дневные столбцы.
+function weekToggleBtnHTML(wk){
+  const collapsed=!!WEEK_COLLAPSED[wk];
+  return`<span onclick="event.stopPropagation();toggleWeek(${wk})"
+    style="display:inline-block;font-size:9px;color:inherit;cursor:pointer;margin-left:5px;
+    padding:0 4px;border:0.5px solid var(--color-border-secondary);border-radius:7px;opacity:.75"
+    title="${collapsed?'Показать дни недели':'Свернуть до итога недели'}">${collapsed?'развернуть':'свернуть'}</span>`;
+}
+
 // ─── Режим "Все": детальная раскладка по дню (18 строк на ячейку) — ПО УМОЛЧАНИЮ
 // не рендерим её в каждой ячейке каждого дня для каждой строки сразу (405 арт. × 18
 // строк × ~31 день -> четверть миллиона DOM-узлов разом, реальная причина подвисаний
@@ -1419,28 +1523,38 @@ function render(){
   displayArts.forEach(art=>days.forEach(day=>{const v=getV(art,day,CM);if(v>0)allVals.push(v);}));
   const gMin=allVals.length?Math.min(...allVals):0,gMax=allVals.length?Math.max(...allVals):1;
   const cats=[...new Set(displayArts.map(a=>a.cat))];
-  const wkStarts=new Set();
-  days.forEach((day,i)=>{if(i>0&&day.wk!==days[i-1].wk)wkStarts.add(i);});
+  // weekGroups — вместо плоского wkStarts/wkg: каждая неделя = столбец "Итого нед."
+  // (всегда) + её дневные столбцы (если WEEK_COLLAPSED[wk] не включён). di — исходный
+  // индекс в days, нужен только для dayTotals/dayTotalsAll/heatCls у дневных столбцов
+  // (у них не меняется). Разделитель недели (wk-sep) теперь всегда на столбце "Итого
+  // нед." — он и есть первый столбец каждой недели, дублировать на дневных не нужно.
+  const weekGroups=[];
+  days.forEach((day,di)=>{
+    if(!weekGroups.length||day.wk!==weekGroups[weekGroups.length-1].wk)weekGroups.push({wk:day.wk,days:[{day,di}]});
+    else weekGroups[weekGroups.length-1].days.push({day,di});
+  });
 
   let html=`<table class="main${CM==='all'?' all-mode':''}"><thead><tr>
     <th class="s0" rowspan="2"></th>
     <th class="s1" rowspan="2" style="text-align:left;padding-left:8px">Артикул</th>
     <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">Факт&nbsp;/ план</th>`;
-  const wkg=[];
-  days.forEach(day=>{
-    if(!wkg.length||day.wk!==wkg.slice(-1)[0].wk)wkg.push({wk:day.wk,count:1});
-    else wkg.slice(-1)[0].count++;
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    const colspan=1+(collapsed?0:wg.days.length);
+    html+=`<th class="wk-hdr${wi>0?' wk-sep':''}" colspan="${colspan}">Нед. ${wg.wk}${weekToggleBtnHTML(wg.wk)}</th>`;
   });
-  wkg.forEach((wg,wi)=>{html+=`<th class="wk-hdr${wi>0?' wk-sep':''}" colspan="${wg.count}">Нед. ${wg.wk}</th>`;});
   html+=`<th rowspan="2" style="min-width:52px;text-align:center">Тренд</th>
     <th rowspan="2" style="min-width:34px;text-align:center">WoW</th>
   </tr><tr>`;
-  days.forEach((day,i)=>{
-    const sep=wkStarts.has(i)?' wk-sep':'';
-    html+=`<th class="day-hdr${sep}" style="min-width:${CM==='all'?'96px':'32px'}">
-      <div style="font-size:9px;font-weight:600">${day.d}</div>
-      <div style="font-size:9px;opacity:.7">${day.wd}</div>
-    </th>`;
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    html+=`<th class="day-hdr wk-total-hdr${wi>0?' wk-sep':''}" style="min-width:${CM==='all'?'96px':'44px'}">Итого</th>`;
+    if(!collapsed)wg.days.forEach(({day})=>{
+      html+=`<th class="day-hdr" style="min-width:${CM==='all'?'96px':'32px'}">
+        <div style="font-size:9px;font-weight:600">${day.d}</div>
+        <div style="font-size:9px;opacity:.7">${day.wd}</div>
+      </th>`;
+    });
   });
   html+=`</tr></thead><tbody>`;
 
@@ -1556,14 +1670,24 @@ function render(){
           ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
         </div>`}
       </td>`;
-    days.forEach((day,di)=>{
-      const sep=wkStarts.has(di)?' wk-sep':'';
+    weekGroups.forEach((wg,wi)=>{
+      const collapsed=!!WEEK_COLLAPSED[wg.wk];
+      const wkDayList=wg.days.map(x=>x.day);
+      const wkSepCls=wi>0?' wk-sep':'';
       if(CM==='all'){
-        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(catDayAll[di])}</td>`;
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList))}</td>`;
       }else{
-        const v=catDayTotals[di];
-        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
+        const wv=statValueForMetric(calcStats(arts,wkDayList),CM);
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${fmtV(wv,CM)}</td>`;
       }
+      if(!collapsed)wg.days.forEach(({day,di})=>{
+        if(CM==='all'){
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di])}</td>`;
+        }else{
+          const v=catDayTotals[di];
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':fmtV(v,CM)}</td>`;
+        }
+      });
     });
     html+=`<td class="trend-cell" title="Открыть график по категории"
       onclick="event.stopPropagation();openTrend('${MP_DB[CMP]||CMP}',null,'${cat.replace(/'/g,"\\'")}',true)">📈</td><td></td></tr>`;
@@ -1683,14 +1807,24 @@ function render(){
         <td class="s1"><div style="display:flex;align-items:center;gap:3px"><span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
           ${commentFieldHTML(art.name,artKey,MP_DB[CMP]||CMP)}</td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
-      days.forEach((day,di)=>{
-        const sep=wkStarts.has(di)?' wk-sep':'';
+      weekGroups.forEach((wg,wi)=>{
+        const collapsed=!!WEEK_COLLAPSED[wg.wk];
+        const wkDayList=wg.days.map(x=>x.day);
+        const wkSepCls=wi>0?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(artDayGated[di])}</td>`;
+          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList))}</td>`;
         }else{
-          const v=getV(art,day,CM);
-          html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+          const wv=statValueForMetric(calcStats([art],wkDayList),CM);
+          html+=`<td class="wk-total${wkSepCls}"><span class="dv">${fmtV(wv,CM)}</span></td>`;
         }
+        if(!collapsed)wg.days.forEach(({day,di})=>{
+          if(CM==='all'){
+            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di])}</td>`;
+          }else{
+            const v=getV(art,day,CM);
+            html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+          }
+        });
       });
       html+=`<td class="spark-td" title="Открыть график"
         onclick="openTrend('${MP_DB[CMP]||CMP}','${art.name.replace(/'/g,"\\'")}',null,false)">${sparkSVG(dayVals,col)}</td>
@@ -1708,13 +1842,23 @@ function render(){
   html+=`<tr class="total-row">
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td>
     <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(dayTotalsAll,totalCum):''}</td>`;
-  days.forEach((day,di)=>{
-    const sep=wkStarts.has(di)?' wk-sep':'';
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    const wkDayList=wg.days.map(x=>x.day);
+    const wkSepCls=wi>0?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di])}</td>`;
+      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList))}</td>`;
     }else{
-      html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+      const wv=statValueForMetric(calcStats(displayArts,wkDayList),CM);
+      html+=`<td class="wk-total${wkSepCls}" style="text-align:center">${fmtV(wv,CM)}</td>`;
     }
+    if(!collapsed)wg.days.forEach(({day,di})=>{
+      if(CM==='all'){
+        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di])}</td>`;
+      }else{
+        html+=`<td class="${day.off?' off-day':''}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+      }
+    });
   });
   html+=`<td></td><td></td></tr>`;
   html+=`</tbody></table>`;
