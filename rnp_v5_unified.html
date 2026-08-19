@@ -1359,25 +1359,6 @@ function toggleCat(catId){
 // строк × ~31 день -> четверть миллиона DOM-узлов разом, реальная причина подвисаний
 // при отрисовке, обнаружено вживую). По умолчанию ячейка дня показывает ОДНО число
 // (выручка) — как в обычных вкладках; полную раскладку — по клику на конкретную строку.
-const ALL_ROW_OPEN={};
-function toggleAllRow(rowId){
-  ALL_ROW_OPEN[rowId]=!ALL_ROW_OPEN[rowId];
-  render();
-}
-function allRowToggleBtnHTML(rowId){
-  const open=!!ALL_ROW_OPEN[rowId];
-  const safe=rowId.replace(/'/g,"\\'");
-  return`<span onclick="event.stopPropagation();toggleAllRow('${safe}')"
-    style="display:inline-block;font-size:9px;color:var(--color-text-tertiary);cursor:pointer;
-    padding:1px 5px;border:0.5px solid var(--color-border-secondary);border-radius:8px;margin-bottom:3px"
-    title="${open?'Свернуть':'Показать'} разбивку по дням в ячейках">${open?'▲ свернуть':'▾ по дням'}</span>`;
-}
-// Свёрнутая ячейка дня (по умолчанию) — одно число, как в обычных вкладках, вместо
-// полной 18-строчной раскладки (та — только по клику, см. ALL_ROW_OPEN выше).
-function compactSingleValueHTML(o){
-  if(!o||!o.rev)return'<span class="dv">—</span>';
-  return`<span class="dv">${Nf(o.rev)}₽</span>`;
-}
 
 function render(){
   if(!DATA[CMP])return;
@@ -1532,7 +1513,7 @@ function render(){
         <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cc};margin-right:6px;vertical-align:middle;border:0.5px solid rgba(0,0,0,0.1)"></span>${cat}
         <span style="font-size:9px;color:var(--color-text-tertiary);margin-left:4px">${arts.length} арт.</span>
       </td>
-      <td class="s2 plan-col">${CM==='all'?allRowToggleBtnHTML('cat_'+catId)+staticLabelBlockHTML(catDayAll,catCum):`
+      <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(catDayAll,catCum):`
         <div class="pr-wrap" style="gap:2px">
           <div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${catFactOrd||0}</span></div>
           <div class="pr-row"><span class="pr-lbl">Продажи</span><span class="pr-fact">${catFactSls||0}</span></div>
@@ -1548,9 +1529,7 @@ function render(){
     days.forEach((day,di)=>{
       const sep=wkStarts.has(di)?' wk-sep':'';
       if(CM==='all'){
-        const catRowId='cat_'+catId;
-        const catCellHTML=day.off?'—':(ALL_ROW_OPEN[catRowId]?compactDayValuesHTML(catDayAll[di]):compactSingleValueHTML(catDayAll[di]));
-        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${catCellHTML}</td>`;
+        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(catDayAll[di])}</td>`;
       }else{
         const v=catDayTotals[di];
         html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
@@ -1654,12 +1633,9 @@ function render(){
       }
 
       const hasPrData = prOrd || prSls || prRev;
-      const artRowId='art_'+art.name.replace(/'/g,"\\'");
       // Режим "Все": s2 — единственное место с подписями (все 18 метрик, не только
-      // те 9 что имеют план), ячейки дней ниже — те же метрики без подписей, по
-      // умолчанию свёрнуты в одно число (см. ALL_ROW_OPEN) — иначе на весь месяц ×
-      // все артикулы разом это четверть миллиона DOM-узлов и подвисание отрисовки.
-      const sm = CM==='all' ? allRowToggleBtnHTML(artRowId)+staticLabelBlockHTML(artDayGated,artCum) : hasPrData
+      // те 9 что имеют план), ячейки дней ниже — те же метрики без подписей.
+      const sm = CM==='all' ? staticLabelBlockHTML(artDayGated,artCum) : hasPrData
         ? `<div class="pr-wrap">${prOrd}${prSls}${prRev}${prAvg}${prNp}${prDrr}${prComm}${prAcq}${prLogi}</div>`
         : `<span class="pr-noplan">нет плана</span>`;
 
@@ -1680,8 +1656,7 @@ function render(){
       days.forEach((day,di)=>{
         const sep=wkStarts.has(di)?' wk-sep':'';
         if(CM==='all'){
-          const artCellHTML=day.off?'—':(ALL_ROW_OPEN[artRowId]?compactDayValuesHTML(artDayGated[di]):compactSingleValueHTML(artDayGated[di]));
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${artCellHTML}</td>`;
+          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(artDayGated[di])}</td>`;
         }else{
           const v=getV(art,day,CM);
           html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
@@ -1702,12 +1677,11 @@ function render(){
   }
   html+=`<tr class="total-row">
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td>
-    <td class="s2 plan-col">${CM==='all'?allRowToggleBtnHTML('total')+staticLabelBlockHTML(dayTotalsAll,totalCum):''}</td>`;
+    <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(dayTotalsAll,totalCum):''}</td>`;
   days.forEach((day,di)=>{
     const sep=wkStarts.has(di)?' wk-sep':'';
     if(CM==='all'){
-      const totalCellHTML=day.off?'—':(ALL_ROW_OPEN['total']?compactDayValuesHTML(dayTotalsAll[di]):compactSingleValueHTML(dayTotalsAll[di]));
-      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${totalCellHTML}</td>`;
+      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di])}</td>`;
     }else{
       html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
     }
