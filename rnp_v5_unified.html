@@ -134,17 +134,22 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 /* Режим "Все": строки s2 (подписи+накопительно) и строки в каждой ячейке дня (голые
    числа) должны идти день-в-день на одной высоте — иначе на 5-6 строке вниз подпись
    слева уезжает от своего числа в ячейке дня (реальный баг, найден по скриншоту).
-   Поэтому .mrow/.msep — ОДИН набор классов без per-контекстных переопределений
+   Поэтому .mline/.msep — ОДИН набор классов без per-контекстных переопределений
    font-size/gap (в отличие от .pr-row/.pr-wrap выше, у тех есть td.all-cell override) —
    используется и в s2 (staticLabelBlockHTML), и в ячейках дня (compactDayValuesHTML),
-   высота гарантированно совпадает. "—" рендерится всегда, ни одна строка не пропускается. */
-.mrow-wrap{display:flex;flex-direction:column;width:100%}
-.mrow{display:flex;align-items:center;gap:3px;white-space:nowrap;height:15px;line-height:15px;font-size:10px}
-.mrow-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
-.mrow-fact{font-weight:500;color:var(--color-text-primary)}
-.msep{height:13px;line-height:13px;font-size:7px;color:var(--color-text-tertiary);
+   высота гарантированно совпадает. "—" рендерится всегда, ни одна строка не пропускается.
+   НЕ .mrow — это имя уже занято (см. строку 87, полоска кнопок-метрик наверху,
+   .mrow{overflow-x:auto;...}) — коллизия имён включала horizontal-scroll на каждой из
+   тысяч крошечных строк, что рисовало стрелки прокрутки на каждой ячейке (реальный
+   баг, найден через getComputedStyle — .mrow-fact наследовал overflow:auto от чужого
+   правила). */
+.mline-wrap{display:flex;flex-direction:column;width:100%}
+.mline{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
+.mline-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
+.mline-fact{font-weight:500;color:var(--color-text-primary)}
+.msep{min-height:14px;line-height:14px;font-size:7px;color:var(--color-text-tertiary);
   text-transform:uppercase;letter-spacing:.02em;border-top:1px dashed var(--color-border-tertiary);
-  box-sizing:border-box;overflow:hidden;white-space:nowrap}
+  box-sizing:border-box;white-space:nowrap}
 .dv{font-size:11px;font-weight:500;display:block;line-height:1.1}
 td.all-cell{text-align:left!important;vertical-align:top;padding:2px 4px!important;min-width:96px}
 td.all-cell .pr-wrap{padding:2px 3px;gap:1px}
@@ -1046,13 +1051,13 @@ function metricCumValue(dayArr,cumO,m){
 // баг, найден по скриншоту пользователя). "—" всегда рендерится текстом, ни одна строка
 // (в т.ч. с "—") не пропускается — иначе то же расхождение высот вернётся.
 function staticLabelBlockHTML(dayArr,cumO){
-  let out='<div class="mrow-wrap">';
+  let out='<div class="mline-wrap">';
   METRIC_ROWS.forEach(m=>{
     const v=metricCumValue(dayArr,cumO,m);
     const pct=metricPct(cumO,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
-    out+=`<div class="mrow"><span class="mrow-lbl">${m.label}</span><span class="mrow-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+    out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
   });
   out+='</div>';
   return out;
@@ -1062,13 +1067,13 @@ function staticLabelBlockHTML(dayArr,cumO){
 // подпись уже статично слева в s2, строка визуально дополняет её, а не повторяет.
 function compactDayValuesHTML(o){
   if(!o)return'';
-  let out='<div class="mrow-wrap">';
+  let out='<div class="mline-wrap">';
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     out+=m.grp?'<div class="msep">&nbsp;</div>':'';
-    out+=`<div class="mrow"><span class="mrow-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+    out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
   });
   out+='</div>';
   return out;
