@@ -147,6 +147,12 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .mline{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
 .mline-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
 .mline-fact{font-weight:500;color:var(--color-text-primary)}
+/* Фон блока по группе метрик — визуально отделяет "Реклама" от "Итого (реклама+
+   органика)" от базовых метрик и от "Склад", вместо одинаковых на вид строк подряд. */
+.mgroup{padding:1px 3px;margin:0 -3px;border-radius:3px}
+.mgroup-ads{background:rgba(0,91,255,.06)}
+.mgroup-total{background:rgba(29,158,117,.07)}
+.mgroup-stock{background:rgba(217,119,6,.07)}
 .msep{min-height:14px;line-height:14px;font-size:7px;color:var(--color-text-tertiary);
   text-transform:uppercase;letter-spacing:.02em;border-top:1px dashed var(--color-border-tertiary);
   box-sizing:border-box;white-space:nowrap}
@@ -965,28 +971,30 @@ function sparkSVG(vals,color,w=48,h=20){
 // Один и тот же список полей, что раньше рисовал dayAllHTML() построчно внутри
 // каждой ячейки-дня — теперь название метрики живёт ОДИН раз слева (статичная
 // колонка s1), накопительный итог — там же (s2), а в колонках дней — голое число.
+// gk — короткий ключ группы, нужен только для фонового цвета блока (см. .mgroup-* CSS
+// ниже) — отдельно от grp (текст заголовка-разделителя, показывается один раз на группу).
 const METRIC_ROWS=[
-  {key:'ord',      label:'Заказы',   fmt:'int'},
-  {key:'sls',      label:'Продажи',  fmt:'int'},
-  {key:'rev',      label:'Выручка',  fmt:'money'},
-  {key:'ret',      label:'Возврат',  fmt:'money', pct:true},
-  {key:'avg',      label:'Ср. чек',  fmt:'money'},
-  {key:'np',       label:'ЧП',       fmt:'money', pct:true, pctSign:true},
-  {key:'spend',    label:'ДРР',      fmt:'money', pct:true},
-  {key:'comm',     label:'Комиссия', fmt:'money', pct:true},
-  {key:'acq',      label:'Эквайринг',fmt:'money', pct:true},
-  {key:'logi',     label:'Логистика',fmt:'money', pct:true},
-  {key:'adShows',  label:'Показы',   fmt:'k', grp:'Реклама'},
-  {key:'adClicks', label:'Клики',    fmt:'int'},
-  {key:'adCart',   label:'Корзина',  fmt:'int'},
-  {key:'adOrders', label:'Заказы',   fmt:'int'},
-  {key:'totalShows', label:'Показы',  fmt:'k', grp:'Итого (реклама+органика)'},
-  {key:'totalCart',  label:'Корзина', fmt:'int'},
-  {key:'totalOrders',label:'Заказы',  fmt:'int'},
+  {key:'ord',      label:'Заказы',   fmt:'int', gk:'core'},
+  {key:'sls',      label:'Продажи',  fmt:'int', gk:'core'},
+  {key:'rev',      label:'Выручка',  fmt:'money', gk:'core'},
+  {key:'ret',      label:'Возврат',  fmt:'money', pct:true, gk:'core'},
+  {key:'avg',      label:'Ср. чек',  fmt:'money', gk:'core'},
+  {key:'np',       label:'ЧП',       fmt:'money', pct:true, pctSign:true, gk:'core'},
+  {key:'spend',    label:'ДРР',      fmt:'money', pct:true, gk:'core'},
+  {key:'comm',     label:'Комиссия', fmt:'money', pct:true, gk:'core'},
+  {key:'acq',      label:'Эквайринг',fmt:'money', pct:true, gk:'core'},
+  {key:'logi',     label:'Логистика',fmt:'money', pct:true, gk:'core'},
+  {key:'adShows',  label:'Показы',   fmt:'k', grp:'Реклама', gk:'ads'},
+  {key:'adClicks', label:'Клики',    fmt:'int', gk:'ads'},
+  {key:'adCart',   label:'Корзина',  fmt:'int', gk:'ads'},
+  {key:'adOrders', label:'Заказы',   fmt:'int', gk:'ads'},
+  {key:'totalShows', label:'Показы',  fmt:'k', grp:'Итого (реклама+органика)', gk:'total'},
+  {key:'totalCart',  label:'Корзина', fmt:'int', gk:'total'},
+  {key:'totalOrders',label:'Заказы',  fmt:'int', gk:'total'},
   // Остаток на складах — снэпшот НА дату, не поток за день. cumMode:'last' — в левой
   // накопительной колонке показываем последний известный остаток за период, а не сумму
   // остатков по дням (та была бы бессмысленной, см. metricCumValue).
-  {key:'stockQty',   label:'Остатки', fmt:'int', grp:'Склад', cumMode:'last'},
+  {key:'stockQty',   label:'Остатки', fmt:'int', grp:'Склад', gk:'stock', cumMode:'last'},
 ];
 // o — объект вида gateDay(): {ord,sls,rev,ret,spend,comm,logi,acq,cogs,ftrev,mrev,adShows,adClicks,adCart,adOrders,totalShows,totalCart,totalOrders}
 function metricVal(o,key){
@@ -1050,16 +1058,30 @@ function metricCumValue(dayArr,cumO,m){
 // и уже на 5-6 строке вниз подпись слева уезжала от своего числа в ячейке дня — реальный
 // баг, найден по скриншоту пользователя). "—" всегда рендерится текстом, ни одна строка
 // (в т.ч. с "—") не пропускается — иначе то же расхождение высот вернётся.
+// Открывает/закрывает <div class="mgroup mgroup-{gk}"> при смене группы — общая для
+// staticLabelBlockHTML/compactDayValuesHTML логика, чтобы фон группы (см. .mgroup-* CSS)
+// был идентичным блоком и в s2, и в ячейке дня (та же причина, что у .mline высоты —
+// расхождение между двумя местами уже один раз давало реальный баг).
+let _mgPrevGk=null;
+function _mgOpen(gk){
+  let out='';
+  if(_mgPrevGk!==null)out+='</div>';
+  out+=`<div class="mgroup mgroup-${gk}">`;
+  _mgPrevGk=gk;
+  return out;
+}
 function staticLabelBlockHTML(dayArr,cumO){
   let out='<div class="mline-wrap">';
+  _mgPrevGk=null;
   METRIC_ROWS.forEach(m=>{
     const v=metricCumValue(dayArr,cumO,m);
     const pct=metricPct(cumO,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
+    if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
     out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
   });
-  out+='</div>';
+  out+='</div></div>';
   return out;
 }
 // Компактный набор чисел для ОДНОЙ ячейки-дня — тот же порядок метрик и те же
@@ -1068,14 +1090,16 @@ function staticLabelBlockHTML(dayArr,cumO){
 function compactDayValuesHTML(o){
   if(!o)return'';
   let out='<div class="mline-wrap">';
+  _mgPrevGk=null;
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
+    if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?'<div class="msep">&nbsp;</div>':'';
     out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
   });
-  out+='</div>';
+  out+='</div></div>';
   return out;
 }
 
