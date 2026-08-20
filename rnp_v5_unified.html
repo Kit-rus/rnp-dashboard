@@ -1100,8 +1100,11 @@ function staticLabelBlockHTML(dayArr,cumO){
 // Компактный набор чисел для ОДНОЙ ячейки-дня — тот же порядок метрик и те же
 // классы/высоты строк, что в staticLabelBlockHTML (см. коммент там), только без подписи —
 // подпись уже статично слева в s2, строка визуально дополняет её, а не повторяет.
+// o может быть null (артикул без единой проводки в этот рабочий день) — раньше тут
+// стоял ранний return'' (буквально пустая ячейка, без тире, выглядело как сбой
+// загрузки). metricVal(null,key)/metricPct(null,...) уже сами возвращают null,
+// а fmtMetric(null,...) уже возвращает '—' — просто не бейлимся раньше времени.
 function compactDayValuesHTML(o){
-  if(!o)return'';
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
   METRIC_ROWS.forEach(m=>{
