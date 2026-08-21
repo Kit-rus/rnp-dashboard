@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ABELLO — Аналитика</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -132,6 +131,32 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .pr-pct.nw{background:var(--color-background-warning);color:var(--color-text-warning)}
 .pr-pct.nv{background:var(--color-background-danger);color:var(--color-text-danger)}
 .pr-noplan{font-size:9px;color:var(--color-text-tertiary);padding:4px 6px;font-style:italic}
+/* Режим "Все": строки s2 (подписи+накопительно) и строки в каждой ячейке дня (голые
+   числа) должны идти день-в-день на одной высоте — иначе на 5-6 строке вниз подпись
+   слева уезжает от своего числа в ячейке дня (реальный баг, найден по скриншоту).
+   Поэтому .mline/.msep — ОДИН набор классов без per-контекстных переопределений
+   font-size/gap (в отличие от .pr-row/.pr-wrap выше, у тех есть td.all-cell override) —
+   используется и в s2 (staticLabelBlockHTML), и в ячейках дня (compactDayValuesHTML),
+   высота гарантированно совпадает. "—" рендерится всегда, ни одна строка не пропускается.
+   НЕ .mrow — это имя уже занято (см. строку 87, полоска кнопок-метрик наверху,
+   .mrow{overflow-x:auto;...}) — коллизия имён включала horizontal-scroll на каждой из
+   тысяч крошечных строк, что рисовало стрелки прокрутки на каждой ячейке (реальный
+   баг, найден через getComputedStyle — .mrow-fact наследовал overflow:auto от чужого
+   правила). */
+.mline-wrap{display:flex;flex-direction:column;width:100%}
+.mline{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
+.mline-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
+.mline-fact{font-weight:500;color:var(--color-text-primary)}
+/* Фон блока по группе метрик — визуально отделяет "Реклама" от "Итого (реклама+
+   органика)" от базовых метрик и от "Склад", вместо одинаковых на вид строк подряд. */
+.mgroup{padding:1px 3px;margin:0 -3px;border-radius:3px}
+.mgroup-core{background:rgba(128,128,128,.05)}
+.mgroup-ads{background:rgba(0,91,255,.06)}
+.mgroup-total{background:rgba(29,158,117,.07)}
+.mgroup-stock{background:rgba(217,119,6,.07)}
+.msep{min-height:14px;line-height:14px;font-size:7px;color:var(--color-text-tertiary);
+  text-transform:uppercase;letter-spacing:.02em;border-top:1px dashed var(--color-border-tertiary);
+  box-sizing:border-box;white-space:nowrap}
 .dv{font-size:11px;font-weight:500;display:block;line-height:1.1}
 td.all-cell{text-align:left!important;vertical-align:top;padding:2px 4px!important;min-width:96px}
 td.all-cell .pr-wrap{padding:2px 3px;gap:1px}
@@ -148,6 +173,11 @@ td.off-day{opacity:.3}
 .h1r{background:rgba(226,75,74,.07)}.h2r{background:rgba(226,75,74,.15)}.h3r{background:rgba(226,75,74,.24)}
 td.spark-td{padding:2px 5px!important}
 td.wk-sep,th.wk-sep{border-left:1px solid var(--color-border-secondary)!important}
+/* Столбец "Итого нед." — лёгкий фон, чтобы отличать от обычных дневных столбцов
+   (и чтобы было видно на глаз, где неделя свёрнута до одного столбца). */
+td.wk-total,th.wk-total-hdr{background:var(--color-background-secondary)}
+tr.art-row td.wk-total{font-weight:600}
+th.wk-total-hdr{font-size:9px;color:var(--color-text-tertiary)}
 tr.total-row td{font-weight:500;border-top:1.5px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:11px}
 tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-background-secondary)}
 .pv{color:var(--color-text-success)}.nv{color:var(--color-text-danger)}
@@ -345,6 +375,13 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   </div>
 </div>
 
+<!-- CDN-скрипт перенесён сюда из <head> — там он БЛОКИРУЮЩИЙ (без async/defer) и
+     задерживал отрисовку ВСЕГО документа, включая голый HTML логина, до своей загрузки.
+     При малейшей заминке сети/CDN страница оставалась полностью белой (реальный кейс —
+     воспроизводилось несколько раз). Внизу body — тот же порядок выполнения (этот тег
+     всё ещё идёт раньше основного <script> ниже, `supabase` будет определён к моменту
+     его использования), но CSS/HTML уже отрисованы к этому моменту. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ─── Supabase ─────────────────────────────────────────────────
 const { createClient } = supabase;
@@ -623,6 +660,7 @@ function buildArticles(rows){
       adOrders:r.ad_orders_qty||0, // заказы, атрибутированные рекламе (ad_stats), не путать с ord (весь спрос)
       adCart:r.ad_cart||0,         // корзина ТОЛЬКО от рекламы (ad_stats)
       totalShows:r.shows||0,       // dm.shows — показы ИТОГО (органика+реклама), из воронки
+      stockQty:r.stock_qty||0,     // остаток на складах на эту дату (stock_snapshots), снэпшот — не поток
       comm:parseFloat(r.commission_day)||0,
       logi:parseFloat(r.logistics_day)||0,
       acq:parseFloat(r.acquiring_day)||0,
@@ -852,7 +890,10 @@ function gateDay(d,cogsPerUnit,monthlyRev){
     // Блок "Реклама" (ad_stats, только рекламный трафик)
     adShows:d.shows||0,adClicks:d.clicks||0,adCart:d.adCart||0,adOrders:d.adOrders||0,
     // Блок "Итого" (daily_metrics, органика+реклама вместе, из воронки)
-    totalShows:d.totalShows||0,totalCart:d.cart||0,totalOrders:d.ord||0};
+    totalShows:d.totalShows||0,totalCart:d.cart||0,totalOrders:d.ord||0,
+    // Остаток на складах — снэпшот НА эту дату, не поток за день (см. коммент у METRIC_ROWS
+    // про cumMode:'last' — суммировать остатки по дням периода бессмысленно).
+    stockQty:d.stockQty||0};
 }
 // Компактный блок со всеми метриками за один день (режим CM==='all').
 // Показываем ВСЕ метрики всегда, без данных — "—" (не скрываем строку).
@@ -930,6 +971,152 @@ function sparkSVG(vals,color,w=48,h=20){
   const lp=pts.filter((_,i)=>act[i]).slice(-1)[0];
   return`<svg width="${w}" height="${h}" style="display:block"><path d="${path}" fill="none" stroke="${color}" stroke-width="1.5"/>${lp?`<circle cx="${lp[0].toFixed(1)}" cy="${lp[1].toFixed(1)}" r="2" fill="${color}"/>`:''}
   </svg>`;
+}
+
+// ─── Режим "Все": под-строки по метрикам вместо блока подписей в каждом дне ──
+// Один и тот же список полей, что раньше рисовал dayAllHTML() построчно внутри
+// каждой ячейки-дня — теперь название метрики живёт ОДИН раз слева (статичная
+// колонка s1), накопительный итог — там же (s2), а в колонках дней — голое число.
+// gk — короткий ключ группы, нужен только для фонового цвета блока (см. .mgroup-* CSS
+// ниже) — отдельно от grp (текст заголовка-разделителя, показывается один раз на группу).
+const METRIC_ROWS=[
+  {key:'ord',      label:'Заказы',   fmt:'int', gk:'core'},
+  {key:'sls',      label:'Продажи',  fmt:'int', gk:'core'},
+  {key:'rev',      label:'Выручка',  fmt:'money', gk:'core'},
+  {key:'ret',      label:'Возврат',  fmt:'money', pct:true, gk:'core'},
+  {key:'avg',      label:'Ср. чек',  fmt:'money', gk:'core'},
+  {key:'np',       label:'ЧП',       fmt:'money', pct:true, pctSign:true, gk:'core'},
+  {key:'spend',    label:'ДРР',      fmt:'money', pct:true, gk:'core'},
+  {key:'comm',     label:'Комиссия', fmt:'money', pct:true, gk:'core'},
+  {key:'acq',      label:'Эквайринг',fmt:'money', pct:true, gk:'core'},
+  {key:'logi',     label:'Логистика',fmt:'money', pct:true, gk:'core'},
+  {key:'adShows',  label:'Показы',   fmt:'k', grp:'Реклама', gk:'ads'},
+  {key:'adClicks', label:'Клики',    fmt:'int', gk:'ads'},
+  {key:'adCart',   label:'Корзина',  fmt:'int', gk:'ads'},
+  {key:'adOrders', label:'Заказы',   fmt:'int', gk:'ads'},
+  {key:'totalShows', label:'Показы',  fmt:'k', grp:'Итого (реклама+органика)', gk:'total'},
+  {key:'totalCart',  label:'Корзина', fmt:'int', gk:'total'},
+  {key:'totalOrders',label:'Заказы',  fmt:'int', gk:'total'},
+  // Остаток на складах — снэпшот НА дату, не поток за день. cumMode:'last' — в левой
+  // накопительной колонке показываем последний известный остаток за период, а не сумму
+  // остатков по дням (та была бы бессмысленной, см. metricCumValue).
+  {key:'stockQty',   label:'Остатки', fmt:'int', grp:'Склад', gk:'stock', cumMode:'last'},
+];
+// o — объект вида gateDay(): {ord,sls,rev,ret,spend,comm,logi,acq,cogs,ftrev,mrev,adShows,adClicks,adCart,adOrders,totalShows,totalCart,totalOrders}
+function metricVal(o,key){
+  if(!o)return null;
+  if(key==='avg')return o.sls>0?o.rev/o.sls:null;
+  if(key==='np'){
+    if(!(o.rev>0)||!(o.cogs>0))return null;
+    return o.rev-o.cogs-o.spend-o.comm-o.logi-o.acq;
+  }
+  // Продажи/Выручка иногда уходят в минус в день/неделю ЧИСТОГО возврата (без своей
+  // продажи в этом же периоде) — это честный побочный эффект формулы нетто
+  // (confirmed_qty/confirmed_sum считают Продажа−Возврат вместе), не ошибка загрузки.
+  // Сам возврат уже отдельно и явно виден в строке "Возврат" — тут гасим до "—",
+  // чтобы голый "-1"/"-4183₽" в Продажах/Выручке не читался как сбой (реальный
+  // фидбек: выглядело "как будто данные не подгрузились").
+  if((key==='sls'||key==='rev')&&o[key]<0)return null;
+  return o[key];
+}
+function fmtMetric(v,fmt){
+  if(v===null||v===undefined||v===0)return'—';
+  if(fmt==='money')return Nf(v)+'₽';
+  if(fmt==='k')return v>0?Fk(v):Nf(v);
+  return Nf(v);
+}
+// % от выручки (той же базы, что раньше использовал dayAllHTML: ftrev дня, а если его
+// нет — mrev, месячная выручка артикула, как fallback — см. коммент у gateDay в v6_live).
+function metricPct(o,key,fmtDef){
+  if(!o||!fmtDef.pct)return null;
+  const v=metricVal(o,key);
+  if(v===null||v===0)return null;
+  const base=o.ftrev>0?o.ftrev:(o.mrev||0);
+  if(!(base>0))return null;
+  return Math.abs(v)/base*100;
+}
+function pctBadgeHTML(pct,v,fmtDef){
+  if(pct===null)return'';
+  const bad=fmtDef.pctSign?v<0:false;
+  const style=fmtDef.pctSign
+    ?`background:${bad?'var(--color-background-danger)':'var(--color-background-success)'};color:${bad?'var(--color-text-danger)':'var(--color-text-success)'}`
+    :`background:var(--color-background-warning);color:var(--color-text-warning)`;
+  return`<span class="pr-pct" style="${style}">${pct.toFixed(1)}%</span>`;
+}
+// Правка после реального фидбека: НЕ отдельные строки-метрики под артикулом (это было
+// дублированием — та же информация уже в статичном блоке s2, просто ещё раз ниже).
+// Вместо этого — ОДНА строка на артикул/категорию/итого, как и было изначально:
+//   s2 (статичная колонка, СПРАВА от фото+названия+комментария) — единственное место,
+//   где живут подписи метрик, plus последний факт/накопительный итог.
+//   ячейки дней — та же выборка метрик, тот же порядок, но БЕЗ подписей (только числа
+//   и % бейджи) — порядок совпадает с s2, так что визуально дополняет её, не повторяет.
+//
+// dayArr — массив длиной days.length, элемент = gateDay(...) объект или null (выходной/нет данных)
+// cumO — объект того же вида, накопленный итог за видимый период
+function metricCumValue(dayArr,cumO,m){
+  // Остаток — снэпшот, не поток: "накопительный итог" по нему считать нельзя (сумма
+  // остатков по дням периода — бессмысленное число). Вместо суммы (cumO) берём
+  // последнее известное значение за видимый период — то, что реально на складе сейчас.
+  if(m.cumMode==='last'){
+    const found=dayArr.slice().reverse().find(o=>o&&o[m.key]!==undefined);
+    return found?found[m.key]:null;
+  }
+  return metricVal(cumO,m.key);
+}
+// Полный подписанный блок — идёт в s2 (справа от фото/названия/комментария) в режиме "Все".
+// ВАЖНО: строки тут (.mrow/.msep) — те же классы с ЖЁСТКО зафиксированной высотой, что
+// использует compactDayValuesHTML() ниже, специально НЕ переиспользуем .pr-row/.pr-wrap
+// (те применяются ещё и в других местах со своими per-context переопределениями
+// font-size/gap — из-за этого высота строки в s2 и высота строки в ячейке дня расходились,
+// и уже на 5-6 строке вниз подпись слева уезжала от своего числа в ячейке дня — реальный
+// баг, найден по скриншоту пользователя). "—" всегда рендерится текстом, ни одна строка
+// (в т.ч. с "—") не пропускается — иначе то же расхождение высот вернётся.
+// Открывает/закрывает <div class="mgroup mgroup-{gk}"> при смене группы — общая для
+// staticLabelBlockHTML/compactDayValuesHTML логика, чтобы фон группы (см. .mgroup-* CSS)
+// был идентичным блоком и в s2, и в ячейке дня (та же причина, что у .mline высоты —
+// расхождение между двумя местами уже один раз давало реальный баг).
+let _mgPrevGk=null;
+function _mgOpen(gk){
+  let out='';
+  if(_mgPrevGk!==null)out+='</div>';
+  out+=`<div class="mgroup mgroup-${gk}">`;
+  _mgPrevGk=gk;
+  return out;
+}
+function staticLabelBlockHTML(dayArr,cumO){
+  let out='<div class="mline-wrap">';
+  _mgPrevGk=null;
+  METRIC_ROWS.forEach(m=>{
+    const v=metricCumValue(dayArr,cumO,m);
+    const pct=metricPct(cumO,m.key,m);
+    const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
+    if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
+    out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
+    out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+  });
+  out+='</div></div>';
+  return out;
+}
+// Компактный набор чисел для ОДНОЙ ячейки-дня — тот же порядок метрик и те же
+// классы/высоты строк, что в staticLabelBlockHTML (см. коммент там), только без подписи —
+// подпись уже статично слева в s2, строка визуально дополняет её, а не повторяет.
+// o может быть null (артикул без единой проводки в этот рабочий день) — раньше тут
+// стоял ранний return'' (буквально пустая ячейка, без тире, выглядело как сбой
+// загрузки). metricVal(null,key)/metricPct(null,...) уже сами возвращают null,
+// а fmtMetric(null,...) уже возвращает '—' — просто не бейлимся раньше времени.
+function compactDayValuesHTML(o){
+  let out='<div class="mline-wrap">';
+  _mgPrevGk=null;
+  METRIC_ROWS.forEach(m=>{
+    const v=metricVal(o,m.key);
+    const pct=metricPct(o,m.key,m);
+    const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
+    if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
+    out+=m.grp?'<div class="msep">&nbsp;</div>':'';
+    out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+  });
+  out+='</div></div>';
+  return out;
 }
 
 // ─── Тренд: модалка с графиком по артикулу/категории ──────────
@@ -1205,10 +1392,117 @@ const CAT_COLLAPSED={};
 function toggleCat(catId){
   CAT_COLLAPSED[catId]=!CAT_COLLAPSED[catId];
   const collapsed=CAT_COLLAPSED[catId];
-  document.querySelectorAll(`tr[data-cat="${catId}"]`).forEach(r=>{r.style.display=collapsed?'none':'';});
+  document.querySelectorAll(`tr[data-cat="${catId}"]`).forEach(r=>{
+    r.style.display=collapsed?'none':'';
+  });
   const icon=document.getElementById('ci_'+catId);
   if(icon)icon.textContent=collapsed?'▶':'▼';
 }
+
+// ─── Столбец "Итого нед." + сворачивание дневных столбцов недели ──────────
+// WEEK_COLLAPSED[wk]=true -> показываем ТОЛЬКО столбец с итогом недели, дневные
+// столбцы скрыты. Меняет структуру шапки/колспанов -> проще перерисовать всю
+// таблицу (render()), чем патчить colspan+display по месту, как toggleCat.
+const WEEK_COLLAPSED={};
+function toggleWeek(wk){
+  WEEK_COLLAPSED[wk]=!WEEK_COLLAPSED[wk];
+  render();
+}
+// Точные суммы (не %) по списку артикулов за произвольный список дней (день/неделя/
+// период — тот же принцип, что artPre/catFactXXX выше, только обобщённо на любой
+// список дней, не только "весь видимый период"). Нужно для столбца "Итого нед.".
+function calcStats(arts,dayList){
+  let ord=0,sls=0,rev=0,spend=0,comm=0,acq=0,logi=0,gross=0,cogsTotal=0,shows=0,clicks=0,cart=0,adOrders=0;
+  for(const art of arts){
+    let artSls=0;
+    for(const day of dayList){
+      if(day.off)continue;
+      ord+=getV(art,day,'orders');
+      const s=getV(art,day,'sales'); sls+=s; artSls+=s;
+      rev+=getV(art,day,'revenue');
+      spend+=getV(art,day,'spend');
+      comm+=getV(art,day,'comm');
+      acq+=getV(art,day,'acq');
+      logi+=getV(art,day,'logi');
+      shows+=getV(art,day,'shows');
+      clicks+=getV(art,day,'clicks');
+      cart+=getV(art,day,'cart');
+      adOrders+=getV(art,day,'adOrders');
+      const dd=art.days[day.d];
+      gross+=(dd?(dd.ftrev||0):0);
+    }
+    cogsTotal+=art.cogs*artSls;
+  }
+  const drr=rev>0?parseFloat((spend/rev*100).toFixed(1)):0;
+  const commPct=gross>0?parseFloat((comm/gross*100).toFixed(1)):0;
+  const logiPct=gross>0?parseFloat((logi/gross*100).toFixed(1)):0;
+  const ctr=shows>0?parseFloat((clicks/shows*100).toFixed(2)):0;
+  let profit=0;
+  if(rev>0&&cogsTotal>0)profit=parseFloat(((rev-cogsTotal-spend-comm-acq-logi)/rev*100).toFixed(1));
+  return{ord,sls,rev,spend,comm,acq,logi,shows,clicks,cart,adOrders,drr,commPct,logiPct,ctr,profit};
+}
+function statValueForMetric(s,metric){
+  if(metric==='orders')return s.ord;
+  if(metric==='sales')return s.sls;
+  if(metric==='revenue')return s.rev;
+  if(metric==='spend')return s.spend;
+  if(metric==='shows')return s.shows;
+  if(metric==='clicks')return s.clicks;
+  if(metric==='cart')return s.cart;
+  if(metric==='adOrders')return s.adOrders;
+  if(metric==='comm')return s.comm;
+  if(metric==='logi')return s.logi;
+  if(metric==='drr')return s.drr;
+  if(metric==='ctr')return s.ctr;
+  if(metric==='commPct')return s.commPct;
+  if(metric==='logiPct')return s.logiPct;
+  if(metric==='profit')return s.profit;
+  return 0;
+}
+// То же самое, но для режима "Все" — возвращает gateDay-образный объект (для
+// compactDayValuesHTML), суммированный по артикулам и дням недели. Остаток (stockQty) —
+// НЕ сумма (см. cumMode:'last' у METRIC_ROWS) — последнее известное значение за
+// неделю, просуммированное по артикулам на ТУ дату.
+function calcGatedWeekCum(arts,weekDays){
+  const o={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0,
+    adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0,stockQty:0};
+  for(const art of arts){
+    for(const day of weekDays){
+      if(day.off)continue;
+      const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);
+      if(!d)continue;
+      o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.ret+=d.ret;o.spend+=d.spend;
+      o.comm+=d.comm;o.logi+=d.logi;o.acq+=d.acq;o.cogs+=d.cogs;o.ftrev+=d.ftrev;o.mrev+=d.mrev;
+      o.adShows+=d.adShows;o.adClicks+=d.adClicks;o.adCart+=d.adCart;o.adOrders+=d.adOrders;
+      o.totalShows+=d.totalShows;o.totalCart+=d.totalCart;o.totalOrders+=d.totalOrders;
+    }
+  }
+  for(let i=weekDays.length-1;i>=0;i--){
+    const day=weekDays[i];
+    if(day.off)continue;
+    let sum=0,found=false;
+    for(const art of arts){
+      const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);
+      if(d){found=true;sum+=d.stockQty||0;}
+    }
+    if(found){o.stockQty=sum;break;}
+  }
+  return o;
+}
+// Ярлык кнопки в шапке недели — свернуть/развернуть дневные столбцы.
+function weekToggleBtnHTML(wk){
+  const collapsed=!!WEEK_COLLAPSED[wk];
+  return`<span onclick="event.stopPropagation();toggleWeek(${wk})"
+    style="display:inline-block;font-size:9px;color:inherit;cursor:pointer;margin-left:5px;
+    padding:0 4px;border:0.5px solid var(--color-border-secondary);border-radius:7px;opacity:.75"
+    title="${collapsed?'Показать дни недели':'Свернуть до итога недели'}">${collapsed?'развернуть':'свернуть'}</span>`;
+}
+
+// ─── Режим "Все": детальная раскладка по дню (18 строк на ячейку) — ПО УМОЛЧАНИЮ
+// не рендерим её в каждой ячейке каждого дня для каждой строки сразу (405 арт. × 18
+// строк × ~31 день -> четверть миллиона DOM-узлов разом, реальная причина подвисаний
+// при отрисовке, обнаружено вживую). По умолчанию ячейка дня показывает ОДНО число
+// (выручка) — как в обычных вкладках; полную раскладку — по клику на конкретную строку.
 
 function render(){
   if(!DATA[CMP])return;
@@ -1239,33 +1533,44 @@ function render(){
   displayArts.forEach(art=>days.forEach(day=>{const v=getV(art,day,CM);if(v>0)allVals.push(v);}));
   const gMin=allVals.length?Math.min(...allVals):0,gMax=allVals.length?Math.max(...allVals):1;
   const cats=[...new Set(displayArts.map(a=>a.cat))];
-  const wkStarts=new Set();
-  days.forEach((day,i)=>{if(i>0&&day.wk!==days[i-1].wk)wkStarts.add(i);});
+  // weekGroups — вместо плоского wkStarts/wkg: каждая неделя = столбец "Итого нед."
+  // (всегда) + её дневные столбцы (если WEEK_COLLAPSED[wk] не включён). di — исходный
+  // индекс в days, нужен только для dayTotals/dayTotalsAll/heatCls у дневных столбцов
+  // (у них не меняется). Разделитель недели (wk-sep) теперь всегда на столбце "Итого
+  // нед." — он и есть первый столбец каждой недели, дублировать на дневных не нужно.
+  const weekGroups=[];
+  days.forEach((day,di)=>{
+    if(!weekGroups.length||day.wk!==weekGroups[weekGroups.length-1].wk)weekGroups.push({wk:day.wk,days:[{day,di}]});
+    else weekGroups[weekGroups.length-1].days.push({day,di});
+  });
 
   let html=`<table class="main${CM==='all'?' all-mode':''}"><thead><tr>
     <th class="s0" rowspan="2"></th>
     <th class="s1" rowspan="2" style="text-align:left;padding-left:8px">Артикул</th>
     <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">Факт&nbsp;/ план</th>`;
-  const wkg=[];
-  days.forEach(day=>{
-    if(!wkg.length||day.wk!==wkg.slice(-1)[0].wk)wkg.push({wk:day.wk,count:1});
-    else wkg.slice(-1)[0].count++;
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    const colspan=1+(collapsed?0:wg.days.length);
+    html+=`<th class="wk-hdr${wi>0?' wk-sep':''}" colspan="${colspan}">Нед. ${wg.wk}${weekToggleBtnHTML(wg.wk)}</th>`;
   });
-  wkg.forEach((wg,wi)=>{html+=`<th class="wk-hdr${wi>0?' wk-sep':''}" colspan="${wg.count}">Нед. ${wg.wk}</th>`;});
   html+=`<th rowspan="2" style="min-width:52px;text-align:center">Тренд</th>
     <th rowspan="2" style="min-width:34px;text-align:center">WoW</th>
   </tr><tr>`;
-  days.forEach((day,i)=>{
-    const sep=wkStarts.has(i)?' wk-sep':'';
-    html+=`<th class="day-hdr${sep}" style="min-width:${CM==='all'?'96px':'32px'}">
-      <div style="font-size:9px;font-weight:600">${day.d}</div>
-      <div style="font-size:9px;opacity:.7">${day.wd}</div>
-    </th>`;
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    html+=`<th class="day-hdr wk-total-hdr${wi>0?' wk-sep':''}" style="min-width:${CM==='all'?'96px':'44px'}">Итого</th>`;
+    if(!collapsed)wg.days.forEach(({day})=>{
+      html+=`<th class="day-hdr" style="min-width:${CM==='all'?'96px':'32px'}">
+        <div style="font-size:9px;font-weight:600">${day.d}</div>
+        <div style="font-size:9px;opacity:.7">${day.wd}</div>
+      </th>`;
+    });
   });
   html+=`</tr></thead><tbody>`;
 
   const dayTotals=days.map(()=>0);
-  const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0}));
+  const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0,
+    adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0,stockQty:0}));
   cats.forEach((cat,catIdx)=>{
     const arts=displayArts.filter(a=>a.cat===cat);
     const cc=CAT_COLORS[cat]||'#eee';
@@ -1300,11 +1605,17 @@ function render(){
     // В режиме "Все" — подитог по категории за день это сумма ₽-полей всех артикулов
     const catDayAll=CM!=='all'?null:days.map(day=>{
       if(day.off)return null;
-      const o={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0};
+      const o={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0,
+        adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0,stockQty:0};
       for(const art of arts){
         const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);if(!d)continue;
         o.ord+=d.ord;o.sls+=d.sls;o.rev+=d.rev;o.ret+=d.ret;o.spend+=d.spend;
         o.comm+=d.comm;o.logi+=d.logi;o.acq+=d.acq;o.cogs+=d.cogs;o.ftrev+=d.ftrev;o.mrev+=d.mrev;
+        o.adShows+=d.adShows;o.adClicks+=d.adClicks;o.adCart+=d.adCart;o.adOrders+=d.adOrders;
+        o.totalShows+=d.totalShows;o.totalCart+=d.totalCart;o.totalOrders+=d.totalOrders;
+        // Остаток за день СУММИРУЕМ ПО АРТИКУЛАМ (сколько всего на складе у категории
+        // в этот день) — осмысленно. А вот cumCatStock ниже (по дням периода) — нет, см. cumMode:'last'.
+        o.stockQty+=d.stockQty;
       }
       return o;
     });
@@ -1339,13 +1650,24 @@ function render(){
     const isCollapsed=!!CAT_COLLAPSED[catId];
     const iconChar=isCollapsed?'▶':'▼';
 
+    // Накопительный итог категории за видимый период — нужен для s2 в режиме "Все"
+    // (до рендера строки, а не после — иначе не успевает к s2).
+    let catCum=null;
+    if(CM==='all'){
+      catCum={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,
+        adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0};
+      catDayAll.forEach(o=>{if(!o)return;
+        for(const k in catCum)catCum[k]+=o[k]||0;
+      });
+    }
+
     html+=`<tr class="cat-row" onclick="toggleCat('${catId}')">
       <td class="s0 cat-toggle"><span id="ci_${catId}">${iconChar}</span></td>
       <td class="s1" style="padding-left:6px">
         <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cc};margin-right:6px;vertical-align:middle;border:0.5px solid rgba(0,0,0,0.1)"></span>${cat}
         <span style="font-size:9px;color:var(--color-text-tertiary);margin-left:4px">${arts.length} арт.</span>
       </td>
-      <td class="s2 plan-col">
+      <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(catDayAll,catCum):`
         <div class="pr-wrap" style="gap:2px">
           <div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${catFactOrd||0}</span></div>
           <div class="pr-row"><span class="pr-lbl">Продажи</span><span class="pr-fact">${catFactSls||0}</span></div>
@@ -1356,16 +1678,26 @@ function render(){
           ${catComm>0?`<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(catComm)}₽</span>${catCommPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catCommPct}%</span>`:''}</div>`:''}
           ${catAcq>0?`<div class="pr-row"><span class="pr-lbl">Эквайринг</span><span class="pr-fact">${Nf(catAcq)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catAcq/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
           ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
-        </div>
+        </div>`}
       </td>`;
-    days.forEach((day,di)=>{
-      const sep=wkStarts.has(di)?' wk-sep':'';
+    weekGroups.forEach((wg,wi)=>{
+      const collapsed=!!WEEK_COLLAPSED[wg.wk];
+      const wkDayList=wg.days.map(x=>x.day);
+      const wkSepCls=wi>0?' wk-sep':'';
       if(CM==='all'){
-        html+=`<td class="cat-sub all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(catDayAll[di])}</td>`;
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList))}</td>`;
       }else{
-        const v=catDayTotals[di];
-        html+=`<td class="cat-sub${day.off?' off-day':''}${sep}">${day.off?'—':fmtV(v,CM)}</td>`;
+        const wv=statValueForMetric(calcStats(arts,wkDayList),CM);
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${fmtV(wv,CM)}</td>`;
       }
+      if(!collapsed)wg.days.forEach(({day,di})=>{
+        if(CM==='all'){
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di])}</td>`;
+        }else{
+          const v=catDayTotals[di];
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':fmtV(v,CM)}</td>`;
+        }
+      });
     });
     html+=`<td class="trend-cell" title="Открыть график по категории"
       onclick="event.stopPropagation();openTrend('${MP_DB[CMP]||CMP}',null,'${cat.replace(/'/g,"\\'")}',true)">📈</td><td></td></tr>`;
@@ -1386,13 +1718,27 @@ function render(){
       const wow=p5a?Math.round((l5a-p5a)/p5a*100):0;
       const wowBad=CM==='drr'?wow>0:wow<0;
       dayVals.forEach((v,i)=>{if(!days[i].off)dayTotals[i]+=v;});
+      // artDayGated — один и тот же per-day gateDay() массив используется и для накопления
+      // dayTotalsAll (итоговая строка), и для под-строк метрик этого артикула ниже —
+      // раньше считался дважды (тут и внутри dayAllHTML на каждую ячейку).
+      let artDayGated=null, artCum=null;
       if(CM==='all'){
-        days.forEach((day,i)=>{
-          if(day.off)return;
-          const d=gateDay(art.days[day.d],art.cogs,art.ft_gross_rev);if(!d)return;
+        artDayGated=days.map(day=>day.off?null:gateDay(art.days[day.d],art.cogs,art.ft_gross_rev));
+        artCum={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,
+          adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0};
+        artDayGated.forEach((d,i)=>{
+          if(!d)return;
           const t=dayTotalsAll[i];
           t.ord+=d.ord;t.sls+=d.sls;t.rev+=d.rev;t.ret+=d.ret;t.spend+=d.spend;
           t.comm+=d.comm;t.logi+=d.logi;t.acq+=d.acq;t.cogs+=d.cogs;t.ftrev+=d.ftrev;t.mrev+=d.mrev;
+          t.adShows+=d.adShows;t.adClicks+=d.adClicks;t.adCart+=d.adCart;t.adOrders+=d.adOrders;
+          t.totalShows+=d.totalShows;t.totalCart+=d.totalCart;t.totalOrders+=d.totalOrders;
+          // Остаток дня СУММИРУЕМ ПО АРТИКУЛАМ для строки "Итого" (сколько всего на
+          // складе за этот день) — но НЕ включаем stockQty в artCum ниже (тот копится
+          // generic-циклом по дням периода — суммировать остатки по дням бессмысленно,
+          // см. cumMode:'last' у METRIC_ROWS).
+          t.stockQty+=d.stockQty;
+          for(const k in artCum)artCum[k]+=d[k]||0;
         });
       }
 
@@ -1451,7 +1797,9 @@ function render(){
       }
 
       const hasPrData = prOrd || prSls || prRev;
-      const sm = hasPrData
+      // Режим "Все": s2 — единственное место с подписями (все 18 метрик, не только
+      // те 9 что имеют план), ячейки дней ниже — те же метрики без подписей.
+      const sm = CM==='all' ? staticLabelBlockHTML(artDayGated,artCum) : hasPrData
         ? `<div class="pr-wrap">${prOrd}${prSls}${prRev}${prAvg}${prNp}${prDrr}${prComm}${prAcq}${prLogi}</div>`
         : `<span class="pr-noplan">нет плана</span>`;
 
@@ -1466,17 +1814,27 @@ function render(){
       const artKey=art.name.replace(/'/g,"\\'");
       html+=`<tr class="art-row" data-cat="${catId}" style="${isCollapsed?'display:none':''}">
         <td class="s0">${photoCell}</td>
-        <td class="s1"><span class="art-name" title="${art.name}">${art.name}</span>
+        <td class="s1"><div style="display:flex;align-items:center;gap:3px"><span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
           ${commentFieldHTML(art.name,artKey,MP_DB[CMP]||CMP)}</td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
-      days.forEach((day,di)=>{
-        const sep=wkStarts.has(di)?' wk-sep':'';
+      weekGroups.forEach((wg,wi)=>{
+        const collapsed=!!WEEK_COLLAPSED[wg.wk];
+        const wkDayList=wg.days.map(x=>x.day);
+        const wkSepCls=wi>0?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(gateDay(art.days[day.d],art.cogs,art.ft_gross_rev))}</td>`;
+          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList))}</td>`;
         }else{
-          const v=getV(art,day,CM);
-          html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}${sep}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+          const wv=statValueForMetric(calcStats([art],wkDayList),CM);
+          html+=`<td class="wk-total${wkSepCls}"><span class="dv">${fmtV(wv,CM)}</span></td>`;
         }
+        if(!collapsed)wg.days.forEach(({day,di})=>{
+          if(CM==='all'){
+            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di])}</td>`;
+          }else{
+            const v=getV(art,day,CM);
+            html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
+          }
+        });
       });
       html+=`<td class="spark-td" title="Открыть график"
         onclick="openTrend('${MP_DB[CMP]||CMP}','${art.name.replace(/'/g,"\\'")}',null,false)">${sparkSVG(dayVals,col)}</td>
@@ -1485,17 +1843,35 @@ function render(){
     });
   });
 
+  let totalCum=null;
+  if(CM==='all'){
+    totalCum={ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,
+      adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0};
+    dayTotalsAll.forEach(o=>{if(!o)return;for(const k in totalCum)totalCum[k]+=o[k]||0;});
+  }
   html+=`<tr class="total-row">
-    <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td><td class="s2 plan-col"></td>`;
-  days.forEach((day,di)=>{
-    const sep=wkStarts.has(di)?' wk-sep':'';
+    <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td>
+    <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(dayTotalsAll,totalCum):''}</td>`;
+  weekGroups.forEach((wg,wi)=>{
+    const collapsed=!!WEEK_COLLAPSED[wg.wk];
+    const wkDayList=wg.days.map(x=>x.day);
+    const wkSepCls=wi>0?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell${day.off?' off-day':''}${sep}">${day.off?'—':dayAllHTML(dayTotalsAll[di])}</td>`;
+      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList))}</td>`;
     }else{
-      html+=`<td class="${day.off?' off-day':''}${sep}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+      const wv=statValueForMetric(calcStats(displayArts,wkDayList),CM);
+      html+=`<td class="wk-total${wkSepCls}" style="text-align:center">${fmtV(wv,CM)}</td>`;
     }
+    if(!collapsed)wg.days.forEach(({day,di})=>{
+      if(CM==='all'){
+        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di])}</td>`;
+      }else{
+        html+=`<td class="${day.off?' off-day':''}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
+      }
+    });
   });
-  html+=`<td></td><td></td></tr></tbody></table>`;
+  html+=`<td></td><td></td></tr>`;
+  html+=`</tbody></table>`;
   document.getElementById('tbl-container').innerHTML=html;
 }
 
