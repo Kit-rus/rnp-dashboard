@@ -301,9 +301,9 @@ async function loadABC(){
     }
 
     // Классическая ABC-классификация (A/B/C по накопленной доле выручки 80/95%) убрана —
-    // будет заменена своей категоризацией. Пока просто сортировка по выручке.
+    // будет заменена своей категоризацией. Сортировка теперь по клику на заголовок
+    // столбца (см. ABC_SORT/renderABCTable/sortABC ниже), по умолчанию — по выручке.
     let list=Object.values(agg).filter(g=>g.orders>0||g.buyouts>0||g.revenue>0);
-    list.sort((a,b)=>b.revenue-a.revenue);
 
     const totalRevenue=list.reduce((s,g)=>s+g.revenue,0);
     for(const g of list){
@@ -312,33 +312,83 @@ async function loadABC(){
       g.netProfit = g.grossProfit - g.commission - g.acquiring - g.logistics - g.spend - g.storage;
       g.avgCheck = g.buyouts>0 ? g.revenue/g.buyouts : 0;
       g.buyoutPct = g.orders>0 ? g.buyouts/g.orders*100 : 0;
+      // Виртуальные поля — считаются здесь один раз, чтобы сортировка по ним работала
+      // так же просто, как по любому другому столбцу (в таблице это готовые ₽/₽ колонки
+      // "Логистика" (лог.+экв. вместе) и "ЧП %", раньше склеивались прямо в HTML-строке).
+      g.logiAcq = g.logistics + g.acquiring;
+      g.netProfitPct = g.revenue>0 ? (g.netProfit/g.revenue*100) : 0;
     }
 
-    document.getElementById('abc-summary').innerHTML=
-      `<div class="sumcard"><div class="v">${Nf(totalRevenue)}₽</div><div class="l">Итого выручка до СПП</div></div>`+
-      `<div class="sumcard"><div class="v">${list.length}</div><div class="l">Позиций</div></div>`;
-
-    let h='<table><tr>'+
-      '<th>Название</th><th>Заказы</th><th>Продажи</th><th>Выкуп %</th>'+
-      '<th>Выручка до СПП</th><th>Доля %</th><th>Ср.чек до СПП</th>'+
-      '<th>С/С</th><th>Вал.приб</th><th>Комиссия</th><th>Логистика</th><th>Хранение</th><th>Реклама</th><th>ЧП</th><th>ЧП %</th></tr>';
-    for(const g of list){
-      const npCls = g.netProfit<0?'neg':'pos';
-      h+=`<tr>`+
-         `<td class="lbl2" title="${g.name}">${g.name}</td>`+
-         `<td>${g.orders}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
-         `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
-         `<td>${Nf(g.avgCheck)}₽</td>`+
-         `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
-         `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logistics+g.acquiring)}₽</td><td>${Nf(g.storage)}₽</td><td>${Nf(g.spend)}₽</td>`+
-         `<td class="${npCls}">${Nf(g.netProfit)}₽</td><td class="${npCls}">${g.revenue>0?(g.netProfit/g.revenue*100).toFixed(1):0}%</td>`+
-         `</tr>`;
-    }
-    h+='</table>';
-    document.getElementById('abc-tbl').innerHTML=h;
+    ABC_LIST=list;
+    renderABCTable();
   }catch(e){
     document.getElementById('abc-tbl').innerHTML=`<span class="neg">Ошибка: ${e.message}</span>`;
   }
+}
+
+// ─── Сортировка таблицы ABC по клику на заголовок столбца ─────────────────
+// ABC_LIST — последний посчитанный набор строк (не пересчитываем при смене
+// сортировки, только переупорядочиваем и перерисовываем — быстро, без похода в БД).
+let ABC_LIST=[];
+let ABC_SORT={field:'revenue',dir:'desc'};
+const ABC_COLS=[
+  {key:'name',        label:'Название',        type:'str'},
+  {key:'orders',       label:'Заказы'},
+  {key:'buyouts',      label:'Продажи'},
+  {key:'buyoutPct',    label:'Выкуп %'},
+  {key:'revenue',      label:'Выручка до СПП'},
+  {key:'share',        label:'Доля %'},
+  {key:'avgCheck',     label:'Ср.чек до СПП'},
+  {key:'cogs',         label:'С/С'},
+  {key:'grossProfit',  label:'Вал.приб'},
+  {key:'commission',   label:'Комиссия'},
+  {key:'logiAcq',      label:'Логистика'},
+  {key:'storage',      label:'Хранение'},
+  {key:'spend',        label:'Реклама'},
+  {key:'netProfit',    label:'ЧП'},
+  {key:'netProfitPct', label:'ЧП %'},
+];
+function sortABC(field){
+  if(ABC_SORT.field===field){
+    ABC_SORT.dir = ABC_SORT.dir==='asc' ? 'desc' : 'asc';
+  }else{
+    const col=ABC_COLS.find(c=>c.key===field);
+    ABC_SORT={field, dir: (col&&col.type==='str') ? 'asc' : 'desc'};
+  }
+  renderABCTable();
+}
+function renderABCTable(){
+  const {field,dir}=ABC_SORT;
+  const col=ABC_COLS.find(c=>c.key===field);
+  const isStr=col&&col.type==='str';
+  const sorted=ABC_LIST.slice().sort((a,b)=>{
+    const cmp=isStr ? String(a[field]||'').localeCompare(String(b[field]||''),'ru') : (a[field]||0)-(b[field]||0);
+    return dir==='asc' ? cmp : -cmp;
+  });
+  const totalRevenue=ABC_LIST.reduce((s,g)=>s+g.revenue,0);
+  document.getElementById('abc-summary').innerHTML=
+    `<div class="sumcard"><div class="v">${Nf(totalRevenue)}₽</div><div class="l">Итого выручка до СПП</div></div>`+
+    `<div class="sumcard"><div class="v">${ABC_LIST.length}</div><div class="l">Позиций</div></div>`;
+
+  let h='<table><tr>'+ABC_COLS.map(c=>{
+    const active=c.key===field;
+    const arrow=active?(dir==='asc'?' ▲':' ▼'):'';
+    return `<th onclick="sortABC('${c.key}')" style="cursor:pointer;user-select:none${active?';color:var(--text)':''}" title="Сортировать по «${c.label}»">${c.label}${arrow}</th>`;
+  }).join('')+'</tr>';
+  for(const g of sorted){
+    const npCls = g.netProfit<0?'neg':'pos';
+    h+=`<tr>`+
+       `<td class="lbl2" title="${g.name}">${g.name}</td>`+
+       `<td>${g.orders}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
+       `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
+       `<td>${Nf(g.avgCheck)}₽</td>`+
+       `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
+       `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logiAcq)}₽</td><td>${Nf(g.storage)}₽</td><td>${Nf(g.spend)}₽</td>`+
+       `<td class="${npCls}">${Nf(g.netProfit)}₽</td><td class="${npCls}">${g.netProfitPct.toFixed(1)}%</td>`+
+       `</tr>`;
+  }
+  h+='</table>';
+  document.getElementById('abc-tbl').innerHTML=h;
 }
 
 function fmtMonth(iso){
