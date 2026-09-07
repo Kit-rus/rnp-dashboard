@@ -574,6 +574,19 @@ function renderTable(){
     const catRevAfter = byCat('revenue_after_spp');
     const catRevMatched = byCat('revenue_matched');
     const catQtyMatched = byCatInt('qty_matched');
+
+    // ── Итого переменные расходы МП (комиссия+эквайринг+логистика туда/обратно+хранение) ──
+    const catCommission = byCat('commission_sum');
+    const catAcquiring  = byCat('acquiring_sum');
+    const catLogiTo     = byCat('logistics_to');
+    const catLogiFrom   = byCat('logistics_from');
+    const catStorage    = byCat('storage');
+    const varCostsMP = commission.map((v,i)=>v+acquiring[i]+logiTo[i]+logiFrom[i]+storage[i]);
+    const catVarCostsMP = {};
+    for(const c of catNames){
+      catVarCostsMP[c] = catCommission[c].map((v,i)=>
+        v+catAcquiring[c][i]+catLogiTo[c][i]+catLogiFrom[c][i]+catStorage[c][i]);
+    }
     const catAvgOur = {}, catAvgClient = {}, catSpp = {};
     for(const c of catNames){
       // Та же выборка, что catAvgClient (client_price IS NOT NULL) — иначе "наш чек" и "чек
@@ -612,6 +625,7 @@ function renderTable(){
     h+=metricBlock('Логистика до клиента', logiTo, byCat('logistics_to'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Логистика от клиента (возвраты)', logiFrom, byCat('logistics_from'), {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Хранение', storage, byCat('storage'), {pctBase:revenue, pctBaseCat:catRevenue});
+    h+=metricBlock('Итого переменные расходы МП', varCostsMP, catVarCostsMP, {pctBase:revenue, pctBaseCat:catRevenue});
     h+=metricBlock('Маржинальная прибыль (М2)', m2, null, {pctBase:revenue, signColor:true});
 
     // ── 4. Продвижение ──
