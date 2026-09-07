@@ -283,10 +283,11 @@ async function loadABC(){
       const key=groupKey(r);
       if(!agg[key]) agg[key]={
         name:key, orders:0, buyouts:0, revenue:0, cogs:0,
-        commission:0, acquiring:0, logistics:0, spend:0, storage:0,
+        commission:0, acquiring:0, logistics:0, spend:0, storage:0, cancelled:0,
       };
       const g=agg[key];
       g.orders   += parseInt(r.orders_qty)||0;
+      g.cancelled += parseInt(r.cancels_qty)||0;
       // Продажи/себестоимость/ср.чек — ТОЛЬКО подтверждённые (financial_transactions), не
       // dm.buyouts_qty (органика+реклама из воронки/API) — тот же принцип, что в
       // rnp_v6_live.html: не может быть продажи без расходов рядом с ней.
@@ -334,6 +335,7 @@ let ABC_SORT={field:'revenue',dir:'desc'};
 const ABC_COLS=[
   {key:'name',        label:'Название',        type:'str'},
   {key:'orders',       label:'Заказы'},
+  {key:'cancelled',    label:'Отменено'},
   {key:'buyouts',      label:'Продажи'},
   {key:'buyoutPct',    label:'Выкуп %'},
   {key:'revenue',      label:'Выручка до СПП'},
@@ -379,7 +381,7 @@ function renderABCTable(){
     const npCls = g.netProfit<0?'neg':'pos';
     h+=`<tr>`+
        `<td class="lbl2" title="${g.name}">${g.name}</td>`+
-       `<td>${g.orders}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
+       `<td>${g.orders}</td><td>${g.cancelled}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
        `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
        `<td>${Nf(g.avgCheck)}₽</td>`+
        `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
@@ -547,6 +549,14 @@ function renderTable(){
 
     // ── СПП / чек / выкупаемость (нужны заранее — идут в блок "Объём") ──
     const buyoutPct = ordersInt.map((o,i)=>o>0?(buyoutsInt[i]/o*100):null);
+    // Выкупаемость по категориям — та же формула (buyouts/orders), но каждая категория
+    // от СВОИХ заказов, не от общих по МП (иначе % занижен для мелких категорий).
+    const catOrdersInt = byCatInt('orders_qty');
+    const catBuyoutsInt = byCatInt('buyouts_qty');
+    const catBuyoutPct = {};
+    for(const c of catNames){
+      catBuyoutPct[c] = catOrdersInt[c].map((o,i)=>o>0 ? (catBuyoutsInt[c][i]/o*100) : null);
+    }
     const revAfterSpp = num('revenue_after_spp');
     const revMatched   = num('revenue_matched'); // выручка ДО СПП, но ТОЛЬКО по строкам, где есть и client_price
     const qtyMatched    = num('qty_matched');
@@ -582,7 +592,7 @@ function renderTable(){
     h+=metricBlock('Заказы, шт', ordersInt, byCatInt('orders_qty'), {fmt:'int'});
     h+=metricBlock('Продажи (выкупы), шт', buyoutsInt, byCatInt('buyouts_qty'), {fmt:'int'});
     h+=`<tr><td class="lbl">Возвраты, шт</td>${returnsInt.map(v=>`<td>${v}</td>`).join('')}</tr>`;
-    h+=`<tr><td class="lbl">Выкупаемость, %</td>${buyoutPct.map(v=>`<td>${v===null?'—':v.toFixed(1)+'%'}</td>`).join('')}</tr>`;
+    h+=metricBlock('Выкупаемость, %', buyoutPct, catBuyoutPct, {fmt:'pct'});
     h+=metricBlock('Средний чек наш (до СПП), ₽', avgCheckOur, catAvgOur);
     h+=metricBlock('Средний чек клиента (после СПП), ₽', avgCheckClient, catAvgClient);
     h+=metricBlock('Средний уровень СПП, %', sppPct, catSpp, {fmt:'pct'});
