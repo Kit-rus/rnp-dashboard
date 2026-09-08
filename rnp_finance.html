@@ -286,7 +286,10 @@ async function loadABC(){
         commission:0, acquiring:0, logistics:0, spend:0, storage:0, cancelled:0,
       };
       const g=agg[key];
-      g.orders   += parseInt(r.orders_qty)||0;
+      // "Заказы" — валовое число (активные + отменённые), как в отчёте "по данным
+      // поставщика" WB — см. тот же коммент в rnp_v6_live.html. "Отменено" остаётся
+      // отдельной информационной колонкой, не вычитается отсюда.
+      g.orders   += (parseInt(r.orders_qty)||0) + (parseInt(r.cancels_qty)||0);
       g.cancelled += parseInt(r.cancels_qty)||0;
       // Продажи/себестоимость/ср.чек — ТОЛЬКО подтверждённые (financial_transactions), не
       // dm.buyouts_qty (органика+реклама из воронки/API) — тот же принцип, что в
@@ -525,8 +528,10 @@ function renderTable(){
     const byCat = field => { const o={}; for(const c of catNames) o[c]=catKey(c,field); return o; };
     const byCatInt = field => { const o={}; for(const c of catNames) o[c]=catInt(c,field); return o; };
 
-    const orders   = num('orders_qty'); // used for buyout% below (total)
-    const ordersInt = rows.map(r=>parseInt(r.orders_qty)||0);
+    // "Заказы" — валовое число (активные + отменённые), как в отчёте "по данным
+    // поставщика" WB ("Заказано, шт") — см. тот же коммент в rnp_v6_live.html.
+    const orders   = rows.map(r=>(parseFloat(r.orders_qty)||0)+(parseFloat(r.cancels_qty)||0)); // used for buyout% below (total)
+    const ordersInt = rows.map(r=>(parseInt(r.orders_qty)||0)+(parseInt(r.cancels_qty)||0));
     const buyoutsInt = rows.map(r=>parseInt(r.buyouts_qty)||0);
     const returnsInt = rows.map(r=>parseInt(r.returns_qty)||0);
     const revenue  = num('revenue');
@@ -551,7 +556,12 @@ function renderTable(){
     const buyoutPct = ordersInt.map((o,i)=>o>0?(buyoutsInt[i]/o*100):null);
     // Выкупаемость по категориям — та же формула (buyouts/orders), но каждая категория
     // от СВОИХ заказов, не от общих по МП (иначе % занижен для мелких категорий).
-    const catOrdersInt = byCatInt('orders_qty');
+    const catOrdersActive = byCatInt('orders_qty');
+    const catCancelsInt = byCatInt('cancels_qty');
+    const catOrdersInt = {};
+    for(const c of catNames){
+      catOrdersInt[c] = catOrdersActive[c].map((o,i)=>o+(catCancelsInt[c][i]||0));
+    }
     const catBuyoutsInt = byCatInt('buyouts_qty');
     const catBuyoutPct = {};
     for(const c of catNames){
@@ -602,7 +612,7 @@ function renderTable(){
 
     // ── 1. Объём ──
     h+=sectionRow('Объём', nCols);
-    h+=metricBlock('Заказы, шт', ordersInt, byCatInt('orders_qty'), {fmt:'int'});
+    h+=metricBlock('Заказы, шт', ordersInt, catOrdersInt, {fmt:'int'});
     h+=metricBlock('Продажи (выкупы), шт', buyoutsInt, byCatInt('buyouts_qty'), {fmt:'int'});
     h+=`<tr><td class="lbl">Возвраты, шт</td>${returnsInt.map(v=>`<td>${v}</td>`).join('')}</tr>`;
     h+=metricBlock('Выкупаемость, %', buyoutPct, catBuyoutPct, {fmt:'pct'});
