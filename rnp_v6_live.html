@@ -71,6 +71,7 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sel{padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);font-size:11px;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans)}
 .kstrip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:1rem}
+#kpi-breakdown.hidden{display:none}
 .kc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px}
 .kl{font-size:10px;color:var(--color-text-tertiary);margin-bottom:1px}
 .kv{font-size:16px;font-weight:500;color:var(--color-text-primary);line-height:1.1}
@@ -316,6 +317,7 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
 </div>
 
 <div class="kstrip" id="kstrip"></div>
+<div id="kpi-breakdown" class="hidden"></div>
 
 <div class="mrow">
   <button class="mt on" onclick="sM('all',this)">Все</button>
@@ -638,11 +640,11 @@ function buildArticles(rows){
     const dd=r.date.slice(8,10);
     map[k].days[dd]={
       // "Заказы" — ВАЛОВОЕ число (активные + отменённые), как в отчёте "по данным
-      // поставщика" WB ("Заказано, шт") — orders_qty из API сам по себе НЕ включает
-      // отменённые (isCancel исключён при записи), поэтому явно прибавляем cancels_qty.
-      // "Отменено" (см. ниже) остаётся отдельной информационной строкой, не вычитается
-      // отсюда и не пересекается по смыслу — просто разбивка того же валового числа.
-      ord:(r.orders_qty||0)+(r.cancels_qty||0),
+      // поставщика" WB ("Заказано, шт"). orders_qty уже само по себе валовое —
+      // и из API (fetch_wb_api.py считает отменённые тоже), и из файла supplier-goods
+      // (там валовое по определению) — cancels_qty НЕ прибавляем, это подмножество,
+      // уже включённое в orders_qty, а не отдельная добавка.
+      ord:r.orders_qty||0,
       // sls/rev — ТОЛЬКО подтверждённые продажи (по financial_transactions, за вычетом
       // возвратов), не dm.buyouts_qty/sum (органика+реклама из воронки/API) — тот может
       // показывать выкуп раньше, чем появится финансовая проводка по нему, и тогда
@@ -676,6 +678,16 @@ function buildArticles(rows){
     };
   }
   return Object.values(map);
+}
+
+// Цветомодель — тот же приём, что colorModel() в rnp_finance.html (группировка по
+// артикулу без хвостового размера): "T55поло серый-бордовый/44" -> "T55поло серый-бордовый".
+function colorModel(sellerArticle){
+  const idx=sellerArticle.lastIndexOf('/');
+  if(idx<0) return sellerArticle;
+  const size=sellerArticle.slice(idx+1).trim();
+  if(size.length<=6) return sellerArticle.slice(0,idx).trim();
+  return sellerArticle;
 }
 
 function buildKPI(rows,mp){
@@ -717,6 +729,28 @@ function buildKPI(rows,mp){
   const np=realCogs>0&&revenue>0?revenue-realCogs-spend-(totalComm+totalAcq+totalLogi)*npRatio:null;
   const npPct=np!==null&&revenue>0?(np/revenue*100).toFixed(1):null;
 
+  // Логистика по кабинету, % от выручки (месячный агрегат, та же дедупликация по
+  // артикулу, что totalLogi выше — logistics_sum уже месячный, не дневной).
+  const logiPct = revenue>0 ? (totalLogi*npRatio)/revenue*100 : 0;
+
+  // Выкупаемость по категориям и цветомоделям — детализация под карточкой
+  // "Выкупаемость" (та же формула buyQty/ordQty, что и общий итог выше, но по группам).
+  const groupBuyout = keyFn => {
+    const g = {};
+    for (const r of rows) {
+      const k = keyFn(r) || '(без категории)';
+      if (!g[k]) g[k] = {ord:0, buy:0};
+      g[k].ord += parseInt(r.orders_qty)||0;
+      g[k].buy += parseInt(r.confirmed_qty)||0;
+    }
+    return Object.entries(g)
+      .map(([name,v])=>({name, ord:v.ord, buy:v.buy, pct: v.ord>0 ? v.buy/v.ord*100 : 0}))
+      .filter(x=>x.ord>0||x.buy>0)
+      .sort((a,b)=>b.ord-a.ord);
+  };
+  const buyoutByCat   = groupBuyout(r=>r.category);
+  const buyoutByModel = groupBuyout(r=>colorModel(r.seller_article));
+
   // ── План (дедупликация по артикулу: план одинаков для всех дней месяца) ──
   const seen=new Set();
   let planOrd=0, planBuy=0, planRev=0;
@@ -753,11 +787,13 @@ function buildKPI(rows,mp){
   return [
     {l:'Заказы',       v:String(ordQty),          plan:planOrd>0?String(planOrd):null,        pct:pc(ordQty,planOrd),   dev:fdev(dev(ordQty,planOrd),v=>String(Math.round(v))),   inv:false},
     {l:'Продажи',      v:String(buyQty),           plan:planBuy>0?String(planBuy):null,        pct:pc(buyQty,planBuy),   dev:fdev(dev(buyQty,planBuy),v=>String(Math.round(v))),   inv:false},
-    {l:'Выкупаемость', v:buyoutPct.toFixed(1)+'%', plan:null,                                  pct:null,                 dev:null,                                                  inv:false},
+    {l:'Выкупаемость', v:buyoutPct.toFixed(1)+'%', plan:null,                                  pct:null,                 dev:null,                                                  inv:false,
+     expand:{byCat:buyoutByCat, byModel:buyoutByModel}},
     {l:'Выручка',      v:Nf(revenue),              plan:planRev>0?Nf(planRev):null,            pct:pc(revenue,planRev),  dev:fdev(dev(revenue,planRev),v=>Nf(Math.abs(v))+(v<0?'':'')), inv:false},
     {l:'Себестоимость',v:cogs>0?Nf(cogs)+'₽':'—', plan:null,                                  pct:null,                 dev:null,                                                  inv:false},
     {l:'ЧП',           v:np!==null?Nf(np)+'₽'+(npPct?' ('+npPct+'%)':''):'—', plan:null,      pct:null,                 dev:null,                                                  inv:false},
     {l:'ДРР %',        v:drr.toFixed(1)+'%',       plan:avgPlanDrr>0?avgPlanDrr.toFixed(1)+'%':null, pct:avgPlanDrr>0?Math.round(drr/avgPlanDrr*100):null, dev:avgPlanDrr>0?fdev(dev(drr,avgPlanDrr),v=>Math.abs(v).toFixed(1)+'%'):null, inv:true},
+    {l:'Логистика %',  v:logiPct.toFixed(1)+'%',   plan:null,                                  pct:null,                 dev:null,                                                  inv:true},
   ];
 }
 
@@ -1380,9 +1416,10 @@ function renderKPI(){
     const devPositive = devVal && devVal.startsWith('+');
     const devGood = devVal ? (k.inv ? !devPositive : devPositive) : null;
     const devCls = devVal ? (devGood ? 'color:var(--color-text-success)' : 'color:var(--color-text-danger)') : '';
+    const clickable = !!k.expand;
 
-    return `<div class="kc">
-      <div class="kl">${k.l}</div>
+    return `<div class="kc"${clickable?` style="cursor:pointer" onclick="toggleKpiBreakdown()" title="Показать/скрыть по категориям и цветомоделям"`:''}>
+      <div class="kl">${k.l}${clickable?' <span style="font-size:9px;color:var(--color-text-tertiary)">▾</span>':''}</div>
       <div class="kv">${k.v}</div>
       ${hasPlan?`
       <div class="krow" style="margin-top:3px">
@@ -1395,6 +1432,44 @@ function renderKPI(){
       :`<div style="font-size:10px;color:var(--color-text-tertiary);margin-top:4px">нет плана</div>`}
     </div>`;
   }).join('');
+  renderKpiBreakdown();
+}
+
+// ─── Разворачиваемая детализация "Выкупаемость" по категориям/цветомоделям ────
+let KPI_BREAKDOWN_OPEN=false;
+function toggleKpiBreakdown(){
+  KPI_BREAKDOWN_OPEN=!KPI_BREAKDOWN_OPEN;
+  renderKpiBreakdown();
+}
+function renderKpiBreakdown(){
+  const box=document.getElementById('kpi-breakdown');
+  if(!box)return;
+  const d=DATA[CMP];
+  const k=d&&d.kpi&&d.kpi.find(x=>x.expand);
+  if(!KPI_BREAKDOWN_OPEN||!k){box.innerHTML='';box.classList.add('hidden');return;}
+  box.classList.remove('hidden');
+  const tbl=(title,list)=>`
+    <div style="flex:1;min-width:220px">
+      <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--color-text-secondary)">${title}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <tr style="color:var(--color-text-tertiary);text-align:left">
+          <th style="padding:2px 6px 2px 0;font-weight:500">Название</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Заказы</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Продажи</th>
+          <th style="padding:2px 0;font-weight:500;text-align:right">Выкуп %</th>
+        </tr>
+        ${list.map(x=>`<tr>
+          <td style="padding:2px 6px 2px 0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x.name}">${x.name}</td>
+          <td style="padding:2px 6px;text-align:right">${x.ord}</td>
+          <td style="padding:2px 6px;text-align:right">${x.buy}</td>
+          <td style="padding:2px 0;text-align:right;font-weight:600">${x.pct.toFixed(1)}%</td>
+        </tr>`).join('')}
+      </table>
+    </div>`;
+  box.innerHTML=`<div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px 14px;background:var(--color-background-secondary);border-radius:8px;margin:8px 0 4px">
+    ${tbl('По категориям', k.expand.byCat)}
+    ${tbl('По цветомоделям', k.expand.byModel)}
+  </div>`;
 }
 
 // ─── Collapse / expand categories ────────────────────────────
