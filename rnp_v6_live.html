@@ -549,7 +549,13 @@ async function saveComment(textarea,sellerArticle,mp){
       if(!r.ok) throw new Error(`сервер отклонил удаление (HTTP ${r.status})`);
       delete COMMENTS[sellerArticle];
     }else{
-      const r=await fetch(`${SB_URL}/rest/v1/article_comments`,{
+      // on_conflict=article_id ОБЯЗАТЕЛЕН: Prefer: resolution=merge-duplicates без него
+      // нацеливается на PRIMARY KEY (id), которого в теле запроса нет — правка УЖЕ
+      // существующего комментария превращалась в plain INSERT и билась об отдельное
+      // UNIQUE(article_id) -> 409 "duplicate key". Первый комментарий на артикул всегда
+      // сохранялся (insert в пустую таблицу), а вот его правка — никогда. Подтверждено
+      // прямым воспроизведением того же запроса (09.09.2026).
+      const r=await fetch(`${SB_URL}/rest/v1/article_comments?on_conflict=article_id`,{
         method:'POST',
         headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`,'Content-Type':'application/json',
                  'Prefer':'resolution=merge-duplicates'},
