@@ -568,7 +568,10 @@ function isArticleVisible(art){
 
 async function loadAvailableMonths(mp){
   const mp_db=MP_DB[mp]||mp;
-  const url=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&select=date&order=date.desc&limit=1000`;
+  // limit был 1000 строк (не дат!) — при сотнях артикулов на маркетплейс это всего
+  // 1-2 последних дня, до прошлых месяцев список физически не доходил (реальный баг:
+  // у OZON, 996 артикулов, в селекторе месяцев был виден только текущий месяц).
+  const url=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&select=date&order=date.desc&limit=20000`;
   const r=await fetch(url,{headers:{'apikey':SB_ANON,'Authorization':`Bearer ${SB_ANON}`}});
   if(!r.ok){return[];}
   const data=await r.json();
