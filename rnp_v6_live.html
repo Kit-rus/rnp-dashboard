@@ -393,7 +393,11 @@ const sb = createClient(
 );
 
 // ─── State ───────────────────────────────────────────────────
-let CMP='wb', CM='all', CWEEK='all', CYEAR=2026, CMONTH=2;
+// CYEAR/CMONTH стартуют от реальной сегодняшней даты (был захардкожен тестовый
+// 2026-02 — реальный баг: дашборд всегда открывался на феврале, т.к. за февраль
+// есть данные, и фолбэк на months[0] в loadAvailableMonths() не срабатывал).
+const _today=new Date();
+let CMP='wb', CM='all', CWEEK='all', CYEAR=_today.getFullYear(), CMONTH=_today.getMonth()+1;
 let DATA={wb:null,oz:null};
 const MP_DB={wb:'wb',oz:'ozon'}; // маппинг кнопка -> значение в БД
 
