@@ -1027,6 +1027,7 @@ function sparkSVG(vals,color,w=48,h=20){
 const METRIC_ROWS=[
   {key:'ord',      label:'Заказы',   fmt:'int', gk:'core'},
   {key:'sls',      label:'Продажи',  fmt:'int', gk:'core'},
+  {key:'buyoutPct',label:'Выкуп %',  fmt:'pct', gk:'core'},
   {key:'rev',      label:'Выручка',  fmt:'money', gk:'core'},
   {key:'ret',      label:'Возврат',  fmt:'money', pct:true, gk:'core'},
   {key:'avg',      label:'Ср. чек',  fmt:'money', gk:'core'},
@@ -1052,6 +1053,9 @@ const METRIC_ROWS=[
 function metricVal(o,key){
   if(!o)return null;
   if(key==='avg')return o.sls>0?o.rev/o.sls:null;
+  // Выкуп % = Продажи/Заказы. При чистом возврате (sls<0, см. коммент ниже) — "—",
+  // не 0%, иначе выглядит как "заказали, но ничего не выкупили", хотя причина другая.
+  if(key==='buyoutPct')return (o.ord>0&&o.sls>=0)?o.sls/o.ord*100:null;
   if(key==='np'){
     if(!(o.rev>0)||!(o.cogs>0))return null;
     return o.rev-o.cogs-o.spend-o.comm-o.logi-o.acq;
@@ -1069,6 +1073,7 @@ function fmtMetric(v,fmt){
   if(v===null||v===undefined||v===0)return'—';
   if(fmt==='money')return Nf(v)+'₽';
   if(fmt==='k')return v>0?Fk(v):Nf(v);
+  if(fmt==='pct')return v.toFixed(1)+'%';
   return Nf(v);
 }
 // % от выручки (той же базы, что раньше использовал dayAllHTML: ftrev дня, а если его
