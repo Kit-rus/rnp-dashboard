@@ -538,20 +538,31 @@ async function saveComment(textarea,sellerArticle,mp){
       articleId=rows[0].id;
     }
     if(!text.trim()){
-      await fetch(`${SB_URL}/rest/v1/article_comments?article_id=eq.${articleId}`,
+      const r=await fetch(`${SB_URL}/rest/v1/article_comments?article_id=eq.${articleId}`,
         {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
+      // fetch() НЕ бросает исключение на HTTP-ошибку (403/500/...) — только на обрыв
+      // сети. Раньше статус ответа тут не проверялся: при истёкшей сессии/сбое RLS
+      // запрос молча проваливался на сервере, а код всё равно считал, что сохранил —
+      // текст пропадал только при следующей перезагрузке (loadComments), без единой
+      // ошибки в моменте. Нашли на реальном кейсе "не сохраняет большие комментарии"
+      // (длинный текст = дольше запрос = больше шанс поймать сбой на нём).
+      if(!r.ok) throw new Error(`сервер отклонил удаление (HTTP ${r.status})`);
       delete COMMENTS[sellerArticle];
     }else{
-      await fetch(`${SB_URL}/rest/v1/article_comments`,{
+      const r=await fetch(`${SB_URL}/rest/v1/article_comments`,{
         method:'POST',
         headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`,'Content-Type':'application/json',
                  'Prefer':'resolution=merge-duplicates'},
         body:JSON.stringify({article_id:articleId,comment:text.trim(),updated_at:new Date().toISOString()}),
       });
+      if(!r.ok) throw new Error(`сервер отклонил сохранение (HTTP ${r.status})`);
       COMMENTS[sellerArticle]={comment:text.trim(),article_id:articleId};
     }
   }catch(e){
-    alert('Ошибка сохранения комментария: '+e.message);
+    // Показываем реальную ошибку и НЕ трогаем COMMENTS — следующий render() откатит
+    // поле к последнему подтверждённо сохранённому значению, а не к тому, что человек
+    // только что напечатал (честно показывает, что правка потерялась, а не притворяется).
+    alert('Комментарий НЕ сохранён: '+e.message+'\nПопробуйте ещё раз.');
   }
   render();
 }
