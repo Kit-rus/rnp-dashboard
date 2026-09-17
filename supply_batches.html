@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Учёт поставок — ABELLO</title>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#f4f4f5;--card:#fff;--border:#e4e4e7;--border2:#f0f0f2;
+  --text:#18181b;--text2:#52525b;--text3:#a1a1aa;
+  --accent:#2563eb;--accent-h:#1d4ed8;
+  --ok:#16a34a;--ok-bg:rgba(22,163,74,.08);
+  --err:#dc2626;--err-bg:rgba(220,38,38,.08);
+  --warn:#d97706;--warn-bg:rgba(217,119,6,.08);
+  --r:8px;--r2:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+
+/* ── Login ── */
+#loginOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;z-index:999}
+#loginBox{background:var(--card);border-radius:12px;padding:36px 44px;width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px}
+#loginBox h2{font-size:17px;font-weight:600;text-align:center}
+#loginBox p{font-size:11px;color:var(--text3);text-align:center;margin-top:-6px}
+#loginBox input{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:var(--r);font-size:14px;outline:none;transition:border-color .15s}
+#loginBox input:focus{border-color:var(--accent)}
+#loginBox button{width:100%;padding:10px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer}
+#loginBox button:hover{background:var(--accent-h)}
+#loginErr{color:var(--err);font-size:11px;text-align:center;min-height:14px}
+
+/* ── App ── */
+#app{display:none;max-width:1200px;margin:0 auto;padding:20px 16px}
+
+/* ── Header ── */
+.pg-hdr{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.pg-hdr h1{font-size:17px;font-weight:600}
+.pg-hdr-links{display:flex;gap:6px}
+.pg-hdr a{font-size:11px;color:var(--text3);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);transition:all .15s}
+.pg-hdr a:hover{color:var(--text);border-color:var(--text2)}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mp-tabs{display:flex;gap:4px}
+.mpt{padding:5px 14px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--card);font-size:12px;cursor:pointer;color:var(--text2);
+  font-family:var(--font);transition:all .15s}
+.mpt.wb{background:#CB11AB;border-color:#CB11AB;color:#fff}
+.mpt.oz{background:#005bff;border-color:#005bff;color:#fff}
+.add-btn{padding:6px 14px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.add-btn:hover{background:var(--accent-h)}
+
+/* ── Add form ── */
+.add-form-wrap{background:var(--card);border:1px solid #bfdbfe;border-radius:var(--r);
+  padding:16px;margin-bottom:14px;display:none}
+.add-form-wrap.open{display:block}
+.add-form-title{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px}
+.add-form-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.af{display:flex;flex-direction:column;gap:4px}
+.af label{font-size:10px;color:var(--text3);font-weight:500}
+.af input,.af select{padding:7px 9px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:12px;outline:none;font-family:var(--font)}
+.af input:focus,.af select:focus{border-color:var(--accent)}
+.af select{background:var(--card)}
+.af-art{min-width:220px}
+.af-date{width:140px}
+.af-num{width:100px;text-align:right}
+.af-note{min-width:180px}
+.af-actions{display:flex;gap:8px;align-items:center}
+.af-save{padding:7px 20px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.af-save:hover{background:var(--accent-h)}
+.af-cancel{padding:7px 12px;background:transparent;color:var(--text3);border:1px solid var(--border);
+  border-radius:var(--r2);font-size:12px;cursor:pointer;font-family:var(--font)}
+.af-cancel:hover{color:var(--text);border-color:var(--text2)}
+.af-err{font-size:11px;color:var(--err);min-height:14px;align-self:center}
+
+/* ── Summary strip ── */
+.sum-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:14px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px}
+.sl{font-size:9px;color:var(--text3);font-weight:500;margin-bottom:2px;text-transform:uppercase}
+.sv{font-size:14px;font-weight:600;color:var(--text);line-height:1.2}
+.sv.ok{color:var(--ok)}.sv.warn{color:var(--warn)}.sv.err{color:var(--err)}
+@media(max-width:800px){.sum-strip{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:500px){.sum-strip{grid-template-columns:repeat(2,1fr)}}
+
+/* ── Empty / loading ── */
+.empty-msg{text-align:center;padding:48px;color:var(--text3);font-size:13px}
+
+/* ── Article section ── */
+.art-sec{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:8px;overflow:hidden}
+.art-sec-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-bottom:1px solid var(--border2)}
+.art-sec-name{font-size:13px;font-weight:600;color:var(--text)}
+.art-sec-cat{font-size:10px;color:var(--text3);margin-left:8px}
+.art-sec-meta{display:flex;align-items:center;gap:10px}
+.art-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500}
+.art-badge.ok{background:var(--ok-bg);color:var(--ok)}
+.art-badge.warn{background:var(--warn-bg);color:var(--warn)}
+.art-badge.err{background:var(--err-bg);color:var(--err)}
+.art-add-link{font-size:11px;color:var(--accent);cursor:pointer;
+  border:none;background:none;font-family:var(--font);padding:0}
+.art-add-link:hover{text-decoration:underline}
+
+/* ── Batches table ── */
+.btbl-wrap{padding:0 14px 12px;overflow-x:auto}
+.btbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.btbl th{font-size:10px;font-weight:500;color:var(--text3);
+  padding:5px 8px;border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap}
+.btbl th:first-child,.btbl th.tc-status{text-align:left}
+.btbl td{padding:5px 8px;border-bottom:1px solid var(--border2);vertical-align:middle;text-align:right}
+.btbl td:first-child{text-align:left;white-space:nowrap}
+.btbl tr:last-child td{border-bottom:none}
+.btbl tr.total-row td{font-weight:600;background:var(--bg);font-size:11px}
+.btbl tr.total-row td:first-child{color:var(--text2)}
+
+/* status badges */
+.sb-done{display:inline-flex;align-items:center;gap:3px;font-size:10px;
+  padding:2px 7px;border-radius:10px;background:var(--ok-bg);color:var(--ok);font-weight:500}
+.sb-partial{display:inline-flex;align-items:center;gap:3px;font-size:10px;
+  padding:2px 7px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-weight:500}
+.sb-unused{display:inline-flex;align-items:center;gap:3px;font-size:10px;
+  padding:2px 7px;border-radius:10px;background:var(--border2);color:var(--text3);font-weight:500}
+
+/* progress bar in batch row */
+.fifo-bar{width:80px;height:6px;background:var(--border2);border-radius:3px;
+  display:inline-block;vertical-align:middle;margin-left:6px;overflow:hidden}
+.fifo-fill{height:100%;border-radius:3px;transition:width .3s}
+.neg{color:var(--err)}.pos{color:var(--ok)}
+
+/* delete btn */
+.del-btn{background:none;border:none;cursor:pointer;color:var(--text3);
+  font-size:13px;padding:2px 5px;border-radius:4px;line-height:1}
+.del-btn:hover{color:var(--err);background:var(--err-bg)}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#18181b;color:#fff;padding:10px 22px;border-radius:8px;
+  font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>🏭 Учёт поставок</h2>
+    <p>Войдите чтобы продолжить</p>
+    <input type="email" id="emailIn" placeholder="Email" autocomplete="email">
+    <input type="password" id="pwdIn" placeholder="Пароль" autocomplete="current-password">
+    <button onclick="doLogin()">Войти</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="pg-hdr">
+    <h1>🏭 Учёт поставок — FIFO</h1>
+    <div class="pg-hdr-links">
+      <a href="rnp_v6_live.html">← Дашборд</a>
+      <a href="plan_editor.html">📋 Unit-экономика</a>
+    </div>
+  </div>
+
+  <div class="ctrl-row">
+    <div class="mp-tabs">
+      <button class="mpt wb" id="bwb" onclick="setMP('wb')">WB</button>
+      <button class="mpt"    id="boz" onclick="setMP('oz')">Ozon</button>
+    </div>
+    <button class="add-btn" onclick="toggleAddForm()">+ Добавить поставку</button>
+    <span style="font-size:11px;color:var(--text3)" id="loadStatus"></span>
+  </div>
+
+  <!-- Add form -->
+  <div class="add-form-wrap" id="addFormWrap">
+    <div class="add-form-title">📦 Новая поставка</div>
+    <div class="add-form-grid">
+      <div class="af af-art">
+        <label>Артикул</label>
+        <select id="af-art"></select>
+      </div>
+      <div class="af af-date">
+        <label>Дата поступления</label>
+        <input type="date" id="af-date">
+      </div>
+      <div class="af">
+        <label>Кол-во (шт)</label>
+        <input type="number" class="af-num" id="af-qty" min="1" placeholder="0">
+      </div>
+      <div class="af">
+        <label>Цена/шт (₽)</label>
+        <input type="number" class="af-num" id="af-cost" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="af af-note">
+        <label>Поставщик / накладная</label>
+        <input type="text" id="af-supplier" placeholder="необязательно">
+      </div>
+      <div class="af af-note">
+        <label>Примечание</label>
+        <input type="text" id="af-notes" placeholder="необязательно">
+      </div>
+      <div class="af-actions">
+        <button class="af-save" onclick="submitBatch()">Добавить</button>
+        <button class="af-cancel" onclick="toggleAddForm()">Отмена</button>
+        <span class="af-err" id="af-err"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="sum-strip" id="sumStrip"></div>
+
+  <!-- Batches list -->
+  <div id="batchList">
+    <div class="empty-msg">Загрузка…</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── Config ────────────────────────────────────────────────────
+// БЫЛ service_role-ключ в открытом JS + пароль открытым текстом в этом же файле
+// ('rnp2024') — реальная уязвимость при публикации. Заменено на анонимный ключ +
+// настоящий Supabase Auth логин, та же схема, что в rnp_v6_live.html. Требует
+// migration_admin_pages_rls.sql (права записи authenticated в supply_batches).
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+const MP_DB  = {wb:'wb', oz:'ozon'};
+const MONTHS_RU = ['','Янв','Фев','Мар','Апр','Май','Июн',
+                   'Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+// ── State ─────────────────────────────────────────────────────
+let CMP      = 'wb';
+let ARTICLES = [];   // articles for current MP
+let BATCHES  = [];   // supply_batches for current MP (sorted by received_at asc)
+let SALES    = {};   // artId → cumulative buyouts_qty (all time from DB)
+let FORM_OPEN = false;
+
+// ── Login (настоящий Supabase Auth) ─────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('emailIn').value.trim();
+  const pass  = document.getElementById('pwdIn').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initPage();
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { CURRENT_SESSION = session; document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; initPage(); }
+})();
+
+// ── API ───────────────────────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: {apikey: SB_ANON, Authorization: `Bearer ${authToken()}`}
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPost(table, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+               'Content-Type': 'application/json',
+               'Prefer': 'return=representation'},
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbDelete(table, id) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {apikey: SB_ANON, Authorization: `Bearer ${authToken()}`}
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+// ── Init ──────────────────────────────────────────────────────
+async function initPage() {
+  await loadAll();
+}
+async function setMP(mp) {
+  CMP = mp;
+  document.getElementById('bwb').className = 'mpt' + (mp === 'wb' ? ' wb' : '');
+  document.getElementById('boz').className = 'mpt' + (mp === 'oz' ? ' oz' : '');
+  // Close add form on MP switch
+  if (FORM_OPEN) toggleAddForm();
+  await loadAll();
+}
+
+// ── Load ──────────────────────────────────────────────────────
+async function loadAll() {
+  const mpDb = MP_DB[CMP];
+  document.getElementById('loadStatus').textContent = 'Загрузка…';
+  document.getElementById('batchList').innerHTML = '<div class="empty-msg">Загрузка…</div>';
+
+  try {
+    // 1. Articles + batches in parallel
+    const [arts, batches] = await Promise.all([
+      sbGet(`articles?select=id,seller_article,name,category&marketplace=eq.${mpDb}&order=category,seller_article&limit=1000`),
+      sbGet(`supply_batches?select=*&marketplace=eq.${mpDb}&order=received_at.asc&limit=10000`)
+    ]);
+    ARTICLES = arts;
+    BATCHES  = batches;
+
+    // 2. Cumulative sales per article (all time) — for FIFO
+    SALES = {};
+    if (arts.length) {
+      const ids = arts.map(a => a.id).join(',');
+      // Load all daily_metrics rows for these articles (buyouts_qty)
+      // Use limit=50000 to get all history
+      const salesRows = await sbGet(
+        `daily_metrics?select=article_id,buyouts_qty&article_id=in.(${ids})&limit=50000`
+      );
+      for (const r of salesRows) {
+        if (r.buyouts_qty) SALES[r.article_id] = (SALES[r.article_id] || 0) + r.buyouts_qty;
+      }
+    }
+
+    document.getElementById('loadStatus').textContent = '';
+    populateArtSelect();
+    renderAll();
+  } catch(e) {
+    document.getElementById('loadStatus').textContent = '';
+    document.getElementById('batchList').innerHTML =
+      `<div class="empty-msg" style="color:var(--err)">Ошибка: ${e.message}</div>`;
+    showToast('Ошибка загрузки: ' + e.message, true);
+  }
+}
+
+// ── FIFO Calculation ──────────────────────────────────────────
+// Returns enriched batch list + totals for one article.
+// Oldest batches are consumed first.
+function computeFIFO(artId) {
+  const batches = BATCHES
+    .filter(b => b.article_id === artId)
+    .sort((a, b) => a.received_at.localeCompare(b.received_at));
+
+  const totalSold = SALES[artId] || 0;
+  let remaining = totalSold;  // units left to "consume" from batches
+  let cogs = 0;
+
+  const enriched = batches.map(b => {
+    const consumed     = Math.min(b.qty_received, remaining);
+    remaining         -= consumed;
+    const qty_left     = b.qty_received - consumed;
+    const batch_cogs   = consumed * parseFloat(b.cost_per_unit);
+    cogs              += batch_cogs;
+
+    const pctConsumed  = b.qty_received > 0 ? consumed / b.qty_received : 0;
+    const status       = qty_left === 0 ? 'done'
+                       : consumed === 0 ? 'unused'
+                       : 'partial';
+    return {
+      ...b,
+      qty_consumed: consumed,
+      qty_left,
+      value_left:   qty_left * parseFloat(b.cost_per_unit),
+      batch_cogs,
+      pctConsumed,
+      status,
+    };
+  });
+
+  const totalReceived = batches.reduce((s,b) => s + b.qty_received, 0);
+  const totalLeft     = enriched.reduce((s,b) => s + b.qty_left, 0);
+  const totalValueLeft= enriched.reduce((s,b) => s + b.value_left, 0);
+  const totalInvested = batches.reduce((s,b) => s + b.qty_received * parseFloat(b.cost_per_unit), 0);
+
+  return {batches: enriched, totalSold, totalReceived, totalLeft,
+          totalValueLeft, totalInvested, cogs};
+}
+
+// ── Formatting ────────────────────────────────────────────────
+const Nf  = n => {
+  const a = Math.abs(n), s = n < 0 ? '−' : '';
+  return s + (a>=1e6?(a/1e6).toFixed(1)+'М':a>=1e3?(a/1e3).toFixed(0)+'К':Math.round(a).toString());
+};
+const Nff = n => Math.round(n).toLocaleString('ru');
+const fmtDate = d => {
+  if (!d) return '—';
+  const [y,m,dd] = d.split('-');
+  return `${dd} ${MONTHS_RU[+m]} ${y}`;
+};
+
+// ── Add form ──────────────────────────────────────────────────
+function toggleAddForm(preArtId) {
+  FORM_OPEN = !FORM_OPEN;
+  const wrap = document.getElementById('addFormWrap');
+  wrap.classList.toggle('open', FORM_OPEN);
+  if (FORM_OPEN) {
+    // Default date = today
+    document.getElementById('af-date').value = new Date().toISOString().slice(0,10);
+    if (preArtId) document.getElementById('af-art').value = preArtId;
+    document.getElementById('af-qty').value  = '';
+    document.getElementById('af-cost').value = '';
+    document.getElementById('af-supplier').value = '';
+    document.getElementById('af-notes').value    = '';
+    document.getElementById('af-err').textContent = '';
+    document.getElementById('af-art').focus();
+  }
+}
+
+function populateArtSelect() {
+  const sel = document.getElementById('af-art');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— выберите артикул —</option>';
+  // Group by category
+  const cats = [...new Set(ARTICLES.map(a=>a.category||'Без категории'))].sort();
+  for (const cat of cats) {
+    const grp = document.createElement('optgroup');
+    grp.label = cat;
+    for (const a of ARTICLES.filter(x=>(x.category||'Без категории')===cat)) {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.seller_article;
+      grp.appendChild(opt);
+    }
+    sel.appendChild(grp);
+  }
+  if (prev) sel.value = prev;
+}
+
+async function submitBatch() {
+  const artId = parseInt(document.getElementById('af-art').value);
+  const date  = document.getElementById('af-date').value;
+  const qty   = parseInt(document.getElementById('af-qty').value);
+  const cost  = parseFloat(document.getElementById('af-cost').value);
+  const supplier = document.getElementById('af-supplier').value.trim();
+  const notes    = document.getElementById('af-notes').value.trim();
+  const errEl    = document.getElementById('af-err');
+
+  errEl.textContent = '';
+  if (!artId)     { errEl.textContent = 'Выберите артикул'; return; }
+  if (!date)      { errEl.textContent = 'Укажите дату'; return; }
+  if (!qty || qty < 1) { errEl.textContent = 'Кол-во должно быть ≥ 1'; return; }
+  if (isNaN(cost) || cost < 0) { errEl.textContent = 'Укажите корректную цену'; return; }
+
+  const payload = {
+    article_id:   artId,
+    marketplace:  MP_DB[CMP],
+    received_at:  date,
+    qty_received: qty,
+    cost_per_unit: cost,
+    supplier: supplier || null,
+    notes:    notes    || null,
+  };
+
+  try {
+    const res = await sbPost('supply_batches', payload);
+    if (res && res[0]) {
+      BATCHES.push(res[0]);
+      BATCHES.sort((a,b) => a.received_at.localeCompare(b.received_at));
+    }
+    toggleAddForm();
+    renderAll();
+    showToast('✓ Поставка добавлена');
+  } catch(e) {
+    errEl.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+async function deleteBatch(id) {
+  if (!confirm('Удалить эту поставку? Действие необратимо.')) return;
+  try {
+    await sbDelete('supply_batches', id);
+    BATCHES = BATCHES.filter(b => b.id !== id);
+    renderAll();
+    showToast('Поставка удалена');
+  } catch(e) {
+    showToast('Ошибка удаления: ' + e.message, true);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────
+function renderAll() {
+  renderSummary();
+  renderList();
+}
+
+function renderSummary() {
+  // Compute all articles' FIFO totals
+  const artsWithBatches = ARTICLES.filter(a => BATCHES.some(b => b.article_id === a.id));
+  let totalBatches = BATCHES.length;
+  let totalReceived = 0, totalLeft = 0, totalValueLeft = 0, totalCOGS = 0, totalSold = 0;
+
+  for (const art of artsWithBatches) {
+    const f = computeFIFO(art.id);
+    totalReceived  += f.totalReceived;
+    totalLeft      += f.totalLeft;
+    totalValueLeft += f.totalValueLeft;
+    totalCOGS      += f.cogs;
+    totalSold      += f.totalSold;
+  }
+
+  const covPct = totalReceived > 0 ? totalLeft / totalReceived * 100 : 0;
+
+  document.getElementById('sumStrip').innerHTML = `
+    <div class="sc"><div class="sl">Партий всего</div>
+      <div class="sv">${totalBatches}</div></div>
+    <div class="sc"><div class="sl">Поступило (шт)</div>
+      <div class="sv">${Nff(totalReceived)}</div></div>
+    <div class="sc"><div class="sl">Продано (FIFO)</div>
+      <div class="sv">${Nff(totalSold)}</div></div>
+    <div class="sc"><div class="sl">Остаток (шт)</div>
+      <div class="sv ${covPct<20?'err':covPct<40?'warn':'ok'}">${Nff(totalLeft)}</div></div>
+    <div class="sc"><div class="sl">Стоимость остатка</div>
+      <div class="sv">${Nf(totalValueLeft)}₽</div></div>
+    <div class="sc"><div class="sl">Себест. (FIFO)</div>
+      <div class="sv">${totalCOGS>0?Nf(totalCOGS)+'₽':'—'}</div></div>
+  `;
+}
+
+function renderList() {
+  // Show articles that have batches, grouped by category
+  const artsWithBatches = ARTICLES.filter(a => BATCHES.some(b => b.article_id === a.id));
+
+  if (!artsWithBatches.length) {
+    document.getElementById('batchList').innerHTML =
+      `<div class="empty-msg">
+         Поставок пока нет.<br>
+         <span style="font-size:11px">Нажмите «+ Добавить поставку», чтобы зафиксировать первую партию.</span>
+       </div>`;
+    return;
+  }
+
+  const cats = [...new Set(artsWithBatches.map(a => a.category||'Без категории'))].sort();
+  let html = '';
+
+  for (const cat of cats) {
+    const arts = artsWithBatches.filter(a => (a.category||'Без категории') === cat);
+    for (const art of arts) {
+      const f = computeFIFO(art.id);
+      const allDone    = f.batches.length > 0 && f.batches.every(b => b.status === 'done');
+      const anyPartial = f.batches.some(b => b.status === 'partial');
+      const badgeCls   = allDone ? 'ok' : anyPartial ? 'warn' : 'ok';
+      const badgeTxt   = allDone ? '✓ Реализовано' : anyPartial ? '⚡ Есть остатки' : `📦 ${Nff(f.totalLeft)} шт`;
+
+      html += `<div class="art-sec">
+        <div class="art-sec-hdr">
+          <div>
+            <span class="art-sec-name">${art.seller_article}</span>
+            <span class="art-sec-cat">${art.category||''}</span>
+          </div>
+          <div class="art-sec-meta">
+            <span class="art-badge ${badgeCls}">${badgeTxt}</span>
+            <button class="art-add-link" onclick="openAddFor(${art.id})">+ партия</button>
+          </div>
+        </div>
+        <div class="btbl-wrap">
+          ${renderBatchTable(art, f)}
+        </div>
+      </div>`;
+    }
+  }
+
+  // Footer: articles without batches (quick add)
+  const artsNo = ARTICLES.filter(a => !BATCHES.some(b => b.article_id === a.id));
+  if (artsNo.length) {
+    html += `<div style="margin-top:10px;padding:10px 14px;
+      background:var(--card);border:1px dashed var(--border);border-radius:var(--r);
+      font-size:11px;color:var(--text3)">
+      <strong style="color:var(--text2)">Без поставок (${artsNo.length}):</strong>
+      ${artsNo.map(a=>`<button class="art-add-link" onclick="openAddFor(${a.id})"
+        style="margin:0 4px 2px">${a.seller_article}</button>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('batchList').innerHTML = html;
+}
+
+function renderBatchTable(art, f) {
+  if (!f.batches.length) return '<div style="padding:8px 0;font-size:11px;color:var(--text3)">Нет партий</div>';
+
+  let html = `<table class="btbl"><thead><tr>
+    <th>Дата поставки</th>
+    <th>Поставщик</th>
+    <th>Получено</th>
+    <th>₽/шт</th>
+    <th>Вложено</th>
+    <th>Продано (FIFO)</th>
+    <th>Остаток (шт)</th>
+    <th>Стоимость ост.</th>
+    <th class="tc-status">Статус</th>
+    <th></th>
+  </tr></thead><tbody>`;
+
+  for (const b of f.batches) {
+    const invested = b.qty_received * parseFloat(b.cost_per_unit);
+    const pctW = Math.round(b.pctConsumed * 100);
+    const fillColor = b.status === 'done' ? 'var(--ok)' : b.status === 'partial' ? 'var(--warn)' : 'var(--border)';
+    const statusBadge =
+      b.status === 'done'    ? `<span class="sb-done">✓ Реализована</span>` :
+      b.status === 'partial' ? `<span class="sb-partial">⚡ Частично</span>` :
+                               `<span class="sb-unused">📦 На складе</span>`;
+    const supplierTxt = [b.supplier, b.invoice_no].filter(Boolean).join(' / ') || '—';
+
+    html += `<tr>
+      <td>${fmtDate(b.received_at)}</td>
+      <td style="font-size:11px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis"
+          title="${supplierTxt}">${supplierTxt}</td>
+      <td>${Nff(b.qty_received)}</td>
+      <td>${Nff(b.cost_per_unit)}₽</td>
+      <td>${Nf(invested)}₽</td>
+      <td>
+        ${b.qty_consumed > 0 ? Nff(b.qty_consumed) : '—'}
+        <span class="fifo-bar"><span class="fifo-fill"
+          style="width:${pctW}%;background:${fillColor}"></span></span>
+      </td>
+      <td class="${b.qty_left>0?'':'pos'}">${b.qty_left>0?Nff(b.qty_left):'—'}</td>
+      <td>${b.value_left>0?Nf(b.value_left)+'₽':'—'}</td>
+      <td>${statusBadge}</td>
+      <td><button class="del-btn" onclick="deleteBatch(${b.id})" title="Удалить поставку">✕</button></td>
+    </tr>`;
+  }
+
+  // Article totals row
+  html += `<tr class="total-row">
+    <td colspan="2">Итого по артикулу</td>
+    <td>${Nff(f.totalReceived)}</td>
+    <td>—</td>
+    <td>${Nf(f.totalInvested)}₽</td>
+    <td>${f.totalSold>0?Nff(f.totalSold):f.totalLeft===f.totalReceived?'—':Nff(f.totalReceived-f.totalLeft)}</td>
+    <td>${f.totalLeft>0?Nff(f.totalLeft):'—'}</td>
+    <td>${f.totalValueLeft>0?Nf(f.totalValueLeft)+'₽':'—'}</td>
+    <td colspan="2" style="font-size:11px;color:var(--text2)">
+      ${f.cogs>0?'Себест. (FIFO): <strong>'+Nf(f.cogs)+'₽</strong>':''}
+    </td>
+  </tr>`;
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function openAddFor(artId) {
+  if (!FORM_OPEN) {
+    FORM_OPEN = true;
+    document.getElementById('addFormWrap').classList.add('open');
+    document.getElementById('af-date').value = new Date().toISOString().slice(0,10);
+  }
+  document.getElementById('af-art').value = artId;
+  document.getElementById('af-qty').focus();
+  document.getElementById('addFormWrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+let _tt;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#18181b';
+  t.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
