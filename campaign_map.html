@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Маппинг кампаний — РНП</title>
+<style>
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg:       #f7f7f7;
+  --card:     #ffffff;
+  --border:   #e2e2e2;
+  --text:     #111111;
+  --text2:    #555555;
+  --text3:    #999999;
+  --accent:   #1d4ed8;
+  --accent-h: #1e40af;
+  --warn:     #d97706;
+  --warn-bg:  rgba(217,119,6,0.08);
+  --ok:       #1d9e75;
+  --ok-bg:    rgba(29,158,117,0.08);
+  --err:      #e24b4a;
+  --err-bg:   rgba(226,75,74,0.08);
+  --r:        8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px }
+
+/* ── Оверлей логина ─────────────────────────────────── */
+#loginOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 999;
+}
+#loginBox {
+  background: var(--card); border-radius: 12px; padding: 40px 48px;
+  width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 20px;
+}
+#loginBox h2 { font-size: 20px; font-weight: 600; text-align: center }
+#loginBox p  { font-size: 13px; color: var(--text2); text-align: center }
+#loginBox input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: var(--r); font-size: 15px; outline: none;
+  transition: border-color .15s;
+}
+#loginBox input:focus { border-color: var(--accent) }
+#loginBox button {
+  width: 100%; padding: 11px; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--r); font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: background .15s;
+}
+#loginBox button:hover { background: var(--accent-h) }
+#loginErr { color: var(--err); font-size: 13px; text-align: center; min-height: 18px }
+
+/* ── Основной контент ───────────────────────────────── */
+#app { display: none; max-width: 1100px; margin: 0 auto; padding: 28px 20px }
+
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px }
+header h1 { font-size: 22px; font-weight: 600 }
+header span { font-size: 13px; color: var(--text3) }
+
+/* ── Тосты ─────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 28px; right: 28px; padding: 12px 20px;
+  border-radius: var(--r); font-size: 14px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15); opacity: 0;
+  transition: opacity .25s; pointer-events: none; z-index: 9999;
+}
+#toast.show { opacity: 1 }
+#toast.ok  { background: var(--ok);  color: #fff }
+#toast.err { background: var(--err); color: #fff }
+
+/* ── Секции ─────────────────────────────────────────── */
+.section { margin-bottom: 32px }
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.section-header h2 { font-size: 16px; font-weight: 600 }
+.badge {
+  padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.badge-warn { background: var(--warn-bg); color: var(--warn) }
+.badge-ok   { background: var(--ok-bg);   color: var(--ok)   }
+
+/* ── Таблица ─────────────────────────────────────────── */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden }
+table { width: 100%; border-collapse: collapse }
+thead th {
+  background: #f9f9f9; padding: 10px 14px; text-align: left;
+  font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase;
+  letter-spacing: .4px; border-bottom: 1px solid var(--border);
+}
+tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle }
+tbody tr:last-child td { border-bottom: none }
+tbody tr:hover > td { background: #fafafa }
+
+.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 13px }
+
+/* ── Кнопки ─────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  border: none; cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff }
+.btn-primary:hover { background: var(--accent-h) }
+.btn-ghost {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: #f0f0f0; color: var(--text) }
+.btn-danger { background: transparent; color: var(--err); border: 1px solid var(--err) }
+.btn-danger:hover { background: var(--err); color: #fff }
+.btn-sm { padding: 4px 10px; font-size: 12px }
+.btn-group { display: flex; gap: 6px }
+
+/* ── Форма привязки ──────────────────────────────────── */
+.bind-form {
+  background: #f9fbff; border: 1px solid #c7d7f8;
+  border-radius: var(--r); padding: 16px 18px;
+  margin: 4px 0 8px; display: none;
+}
+.bind-form.open { display: block }
+.bind-form h4 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--accent) }
+.bind-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px }
+.bind-row {
+  display: grid; grid-template-columns: 1fr 110px auto;
+  gap: 8px; align-items: center;
+}
+.bind-row input[type=number] {
+  padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+  font-size: 13px; font-family: inherit; background: #fff; outline: none;
+}
+.bind-row input:focus { border-color: var(--accent) }
+
+/* ── Searchable article picker ─────────────────────────── */
+.art-picker { position: relative; flex: 1 }
+.art-input {
+  width: 100%; padding: 7px 10px; border: 1.5px solid var(--border);
+  border-radius: 6px; font-size: 13px; font-family: inherit;
+  background: #fff; outline: none; cursor: text;
+}
+.art-input:focus { border-color: var(--accent) }
+.art-input.selected { border-color: var(--ok); background: #f6fdf9 }
+.art-dropdown {
+  display: none; position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+  background: #fff; border: 1.5px solid var(--accent);
+  border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  max-height: 240px; overflow-y: auto; z-index: 100;
+}
+.art-dropdown.open { display: block }
+.art-option {
+  padding: 8px 12px; cursor: pointer; font-size: 13px;
+  border-bottom: 1px solid var(--border); line-height: 1.4;
+}
+.art-option:last-child { border-bottom: none }
+.art-option:hover { background: #eef3ff }
+.art-option b { color: var(--text) }
+.art-option span { color: var(--text3); font-size: 11px }
+.art-option-hint {
+  padding: 8px 12px; font-size: 12px; color: var(--text3);
+  text-align: center; font-style: italic;
+}
+.bind-row .del-row-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text3); font-size: 18px; line-height: 1;
+  padding: 0 4px; transition: color .15s;
+}
+.bind-row .del-row-btn:hover { color: var(--err) }
+.weight-hint { font-size: 12px; color: var(--text3); margin-bottom: 12px }
+.form-actions { display: flex; gap: 8px; margin-top: 4px }
+
+/* ── Пустое состояние ────────────────────────────────── */
+.empty {
+  text-align: center; padding: 40px 20px;
+  color: var(--text3); font-size: 14px;
+}
+.empty strong { display: block; font-size: 18px; margin-bottom: 6px; color: var(--text2) }
+
+/* ── Загрузка ────────────────────────────────────────── */
+.loading { text-align: center; padding: 32px; color: var(--text3) }
+
+</style>
+</head>
+<body>
+
+<!-- Логин -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>🔐 Управление кампаниями</h2>
+    <p>Привязка рекламных кампаний к артикулам</p>
+    <input id="emailInput" type="email" placeholder="Email" autocomplete="email">
+    <input id="pwdInput" type="password" placeholder="Пароль" autocomplete="current-password">
+    <div id="loginErr"></div>
+    <button onclick="doLogin()">Войти</button>
+  </div>
+</div>
+
+<!-- Тост -->
+<div id="toast"></div>
+
+<!-- Основной контент -->
+<div id="app">
+  <header>
+    <h1>📎 Маппинг рекламных кампаний</h1>
+    <span id="lastUpdate"></span>
+  </header>
+
+  <!-- Без атрибуции -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Без атрибуции</h2>
+      <span id="unattBadge" class="badge badge-warn">…</span>
+      <span style="font-size:13px;color:var(--text3)" id="unattSpend"></span>
+    </div>
+    <div class="card" id="unattTable">
+      <div class="loading">Загружаю данные…</div>
+    </div>
+  </div>
+
+  <!-- Существующие маппинги -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Существующие маппинги</h2>
+      <span id="mapBadge" class="badge badge-ok">…</span>
+    </div>
+    <div class="card" id="mapTable">
+      <div class="loading">Загружаю данные…</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+//  КОНФИГУРАЦИЯ
+// ═══════════════════════════════════════════════════════════
+// БЫЛ service_role-ключ в открытом JS + пароль '' (пропускал любой ввод) —
+// реальная уязвимость, если бы страницу опубликовали как есть (полный доступ
+// к БД в обход RLS любому читателю исходного кода). Заменено на анонимный ключ
+// + настоящий Supabase Auth логин, та же схема, что в rnp_v6_live.html.
+// Требует migration_admin_pages_rls.sql (даёт authenticated права записи —
+// раньше их не было вообще, поэтому и использовался service_role).
+
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+
+// ═══════════════════════════════════════════════════════════
+
+function HDR() {
+  return {
+    'apikey': SB_ANON,
+    'Authorization': `Bearer ${authToken()}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation',
+  };
+}
+
+// ── Логин (настоящий Supabase Auth) ─────────────────────────
+document.getElementById('pwdInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const email = document.getElementById('emailInput').value.trim();
+  const pass  = document.getElementById('pwdInput').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { CURRENT_SESSION = session; document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; init(); }
+})();
+
+// ── Toast ────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = `show ${type}`;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.className = '', 3000);
+}
+
+// ── Supabase helpers ──────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(SB_URL + '/rest/v1/' + path, { headers: HDR() });
+  if (!r.ok) throw new Error(`GET ${path}: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+async function sbPost(path, body) {
+  const r = await fetch(SB_URL + '/rest/v1/' + path, {
+    method: 'POST', headers: HDR(), body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(`POST ${path}: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+async function sbPatch(path, body) {
+  const r = await fetch(SB_URL + '/rest/v1/' + path, {
+    method: 'PATCH', headers: { ...HDR(), 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(`PATCH ${path}: ${r.status} ${await r.text()}`);
+}
+
+async function sbDelete(path) {
+  const r = await fetch(SB_URL + '/rest/v1/' + path, {
+    method: 'DELETE', headers: HDR()
+  });
+  if (!r.ok) throw new Error(`DELETE ${path}: ${r.status} ${await r.text()}`);
+}
+
+// ── Данные ────────────────────────────────────────────────
+let ALL_ARTICLES = [];   // { id, marketplace_id, name, marketplace }
+let ALL_MAPPINGS = [];   // { id, campaign_id, article_id, weight, note, articles:{...} }
+let UNATT_CAMPS  = [];   // { campaign_id, campaign_name, total_spend, date_min, date_max }
+let CAMP_NAMES   = {};   // campaign_id → campaign_name (для всех кампаний)
+
+async function init() {
+  try {
+    await Promise.all([loadArticles(), loadCampaignNames()]);
+    await Promise.all([loadUnattributed(), loadMappings()]);
+    document.getElementById('lastUpdate').textContent =
+      'Обновлено: ' + new Date().toLocaleTimeString('ru');
+  } catch (e) {
+    toast('Ошибка загрузки: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+async function loadArticles() {
+  ALL_ARTICLES = await sbGet('articles?select=id,marketplace_id,name,marketplace&order=name');
+}
+
+async function loadCampaignNames() {
+  // Забираем уникальные campaign_id + campaign_name из всей таблицы ad_stats
+  const rows = await sbGet('ad_stats?select=campaign_id,campaign_name&campaign_id=not.is.null&limit=5000');
+  CAMP_NAMES = {};
+  for (const r of rows) {
+    if (r.campaign_id && r.campaign_name && !CAMP_NAMES[r.campaign_id]) {
+      CAMP_NAMES[r.campaign_id] = r.campaign_name;
+    }
+  }
+}
+
+async function loadUnattributed() {
+  // Все строки ad_stats без article_id
+  const rows = await sbGet('ad_stats?select=campaign_id,campaign_name,spend,date&article_id=is.null&limit=5000');
+
+  // Агрегируем по campaign_id
+  const agg = {};
+  for (const r of rows) {
+    const cid = r.campaign_id;
+    if (!cid) continue;
+    if (!agg[cid]) agg[cid] = {
+      campaign_id: cid,
+      campaign_name: r.campaign_name || CAMP_NAMES[cid] || '',
+      total_spend: 0, date_min: r.date, date_max: r.date
+    };
+    agg[cid].total_spend += parseFloat(r.spend || 0);
+    if (!agg[cid].campaign_name && r.campaign_name) agg[cid].campaign_name = r.campaign_name;
+    if (r.date < agg[cid].date_min) agg[cid].date_min = r.date;
+    if (r.date > agg[cid].date_max) agg[cid].date_max = r.date;
+  }
+
+  UNATT_CAMPS = Object.values(agg).sort((a, b) => b.total_spend - a.total_spend);
+
+  const total = UNATT_CAMPS.reduce((s, c) => s + c.total_spend, 0);
+  document.getElementById('unattBadge').textContent = UNATT_CAMPS.length + ' кампаний';
+  document.getElementById('unattSpend').textContent =
+    UNATT_CAMPS.length ? `— ${total.toLocaleString('ru')} ₽ неатрибутировано` : '';
+
+  renderUnattributed();
+}
+
+async function loadMappings() {
+  ALL_MAPPINGS = await sbGet(
+    'campaign_article_map?select=id,campaign_id,article_id,weight,note,articles(id,marketplace_id,name,marketplace)&order=campaign_id'
+  );
+  document.getElementById('mapBadge').textContent = ALL_MAPPINGS.length + ' записей';
+  renderMappings();
+}
+
+// ── Рендер: без атрибуции ─────────────────────────────────
+function renderUnattributed(filter = '') {
+  const el = document.getElementById('unattTable');
+  if (!UNATT_CAMPS.length) {
+    el.innerHTML = '<div class="empty"><strong>✓ Всё атрибутировано</strong>Нет кампаний без привязки</div>';
+    return;
+  }
+
+  const q = filter.toLowerCase();
+  const filtered = q
+    ? UNATT_CAMPS.filter(c =>
+        c.campaign_id.includes(q) ||
+        (c.campaign_name || '').toLowerCase().includes(q))
+    : UNATT_CAMPS;
+
+  const rows = filtered.map(c => {
+    const period = c.date_min === c.date_max ? c.date_min
+      : `${c.date_min} — ${c.date_max}`;
+    const campName = c.campaign_name
+      ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${c.campaign_name}</div>`
+      : '';
+    return `
+    <tr id="urow-${c.campaign_id}">
+      <td>
+        <span class="mono">${c.campaign_id}</span>
+        ${campName}
+      </td>
+      <td><b>${c.total_spend.toLocaleString('ru', {maximumFractionDigits:0})} ₽</b></td>
+      <td style="color:var(--text3);font-size:12px">${period}</td>
+      <td>
+        <button class="btn btn-primary btn-sm" onclick="toggleBindForm('${c.campaign_id}', 'unatt')">
+          + Привязать
+        </button>
+      </td>
+    </tr>
+    <tr id="uform-${c.campaign_id}"><td colspan="4" style="padding:0 14px 12px">
+      ${buildBindForm(c.campaign_id, 'unatt')}
+    </td></tr>`;
+  }).join('');
+
+  const noRes = filtered.length === 0
+    ? `<tr><td colspan="4"><div class="empty">Ничего не найдено по запросу «${filter}»</div></td></tr>`
+    : '';
+
+  el.innerHTML = `
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <input id="searchUnatt" type="text" placeholder="🔍 Поиск по ID или названию кампании…"
+        style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;outline:none"
+        oninput="renderUnattributed(this.value)"
+        value="${filter.replace(/"/g, '&quot;')}">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID / Название кампании</th>
+          <th>Расход</th>
+          <th>Период</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>${rows}${noRes}</tbody>
+    </table>`;
+}
+
+// ── Рендер: существующие маппинги ─────────────────────────
+function renderMappings(filter = '') {
+  const el = document.getElementById('mapTable');
+  if (!ALL_MAPPINGS.length) {
+    el.innerHTML = '<div class="empty"><strong>Маппингов нет</strong>Добавьте привязки через блок «Без атрибуции»</div>';
+    return;
+  }
+
+  // Группируем по campaign_id
+  const bycamp = {};
+  for (const m of ALL_MAPPINGS) {
+    if (!bycamp[m.campaign_id]) bycamp[m.campaign_id] = [];
+    bycamp[m.campaign_id].push(m);
+  }
+
+  const q = filter.toLowerCase();
+
+  const rows = Object.entries(bycamp)
+    .filter(([campId, items]) => {
+      if (!q) return true;
+      const campName = (CAMP_NAMES[campId] || '').toLowerCase();
+      const artNames = items.map(m => ((m.articles?.name || '') + ' ' + (m.articles?.marketplace_id || '')).toLowerCase()).join(' ');
+      return campId.includes(q) || campName.includes(q) || artNames.includes(q);
+    })
+    .map(([campId, items]) => {
+      const campName = CAMP_NAMES[campId] || '';
+      const campCell = campName
+        ? `<span class="mono">${campId}</span><div style="font-size:12px;color:var(--text2);margin-top:2px">${campName}</div>`
+        : `<span class="mono">${campId}</span>`;
+
+      const artList = items.map(m => {
+        const art = m.articles;
+        const artLabel = art
+          ? `<b>${art.marketplace_id}</b> <span style="color:var(--text3);font-size:12px">[${(art.marketplace||'').toUpperCase()}] ${art.name || '—'}</span>`
+          : `<span style="color:var(--text3)">#${m.article_id}</span>`;
+        const weightStr = m.weight != null
+          ? `<span style="color:var(--text3);font-size:12px">${Math.round(m.weight * 100)}%</span>`
+          : `<span style="color:var(--text3);font-size:12px">поровну</span>`;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          ${artLabel} ${weightStr}
+          <button class="btn btn-ghost btn-sm" onclick="deleteMapping(${m.id})" title="Удалить привязку">✕</button>
+        </div>`;
+      }).join('');
+
+      return `
+      <tr id="mrow-${campId}">
+        <td>${campCell}</td>
+        <td>${artList}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="toggleBindForm('${campId}', 'map')">
+            ✎ Изменить
+          </button>
+        </td>
+      </tr>
+      <tr id="mform-${campId}"><td colspan="3" style="padding:0 14px 12px">
+        ${buildBindForm(campId, 'map')}
+      </td></tr>`;
+    }).join('');
+
+  const noRes = !rows
+    ? `<tr><td colspan="3"><div class="empty">Ничего не найдено по запросу «${filter}»</div></td></tr>`
+    : '';
+
+  el.innerHTML = `
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <input type="text" placeholder="🔍 Поиск по ID кампании, названию или артикулу…"
+        style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;outline:none"
+        oninput="renderMappings(this.value)"
+        value="${filter.replace(/"/g, '&quot;')}">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID / Название кампании</th>
+          <th>Привязанные артикулы</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>${rows}${noRes}</tbody>
+    </table>`;
+}
+
+// ── Searchable article picker ─────────────────────────────
+
+function makePickerRow() {
+  return `<div class="bind-row">
+    <div class="art-picker" data-article-id="">
+      <input class="art-input" type="text" placeholder="🔍 Введите название или артикул WB…"
+        autocomplete="off"
+        oninput="filterArtOptions(this)"
+        onfocus="openArtPicker(this)"
+        onblur="setTimeout(()=>closeArtPicker(this),160)">
+      <div class="art-dropdown"></div>
+    </div>
+    <input type="number" min="1" max="100" placeholder="% (пусто = поровну)">
+    <button class="del-row-btn" onclick="delBindRow(this)">×</button>
+  </div>`;
+}
+
+function renderArtOptions(dropdown, q) {
+  const filtered = q
+    ? ALL_ARTICLES.filter(a =>
+        (a.name || '').toLowerCase().includes(q) ||
+        String(a.marketplace_id || '').includes(q) ||
+        (a.marketplace || '').toLowerCase().includes(q))
+    : ALL_ARTICLES;
+
+  const shown = filtered.slice(0, 60);
+  dropdown.innerHTML = shown.map(a =>
+    `<div class="art-option"
+      data-id="${a.id}"
+      data-label="${a.marketplace_id} — ${(a.name || '—').replace(/"/g,'&quot;')} [${(a.marketplace||'').toUpperCase()}]"
+      onmousedown="selectArt(this)">
+      <b>${a.marketplace_id}</b>
+      <span> [${(a.marketplace||'').toUpperCase()}] ${a.name || '—'}</span>
+    </div>`
+  ).join('') + (filtered.length > 60
+    ? `<div class="art-option-hint">Показаны 60 из ${filtered.length} — уточните запрос</div>`
+    : filtered.length === 0
+      ? `<div class="art-option-hint">Ничего не найдено</div>`
+      : '');
+}
+
+function openArtPicker(inputEl) {
+  const picker   = inputEl.closest('.art-picker');
+  const dropdown = picker.querySelector('.art-dropdown');
+  renderArtOptions(dropdown, inputEl.value.toLowerCase());
+  dropdown.classList.add('open');
+}
+
+function filterArtOptions(inputEl) {
+  const picker   = inputEl.closest('.art-picker');
+  const dropdown = picker.querySelector('.art-dropdown');
+  picker.dataset.articleId = '';           // сбрасываем выбор при редактировании
+  inputEl.classList.remove('selected');
+  renderArtOptions(dropdown, inputEl.value.toLowerCase());
+  dropdown.classList.add('open');
+}
+
+function selectArt(optEl) {
+  const picker  = optEl.closest('.art-picker');
+  const inputEl = picker.querySelector('.art-input');
+  picker.dataset.articleId = optEl.dataset.id;
+  inputEl.value = optEl.dataset.label;
+  inputEl.classList.add('selected');
+  picker.querySelector('.art-dropdown').classList.remove('open');
+}
+
+function closeArtPicker(inputEl) {
+  const picker = inputEl.closest('.art-picker');
+  picker.querySelector('.art-dropdown').classList.remove('open');
+  // Если пользователь не выбрал из списка — очищаем
+  if (!picker.dataset.articleId) inputEl.value = '';
+}
+
+// ── Форма привязки ────────────────────────────────────────
+
+function buildBindForm(campId, context) {
+  const safeId = campId.replace(/[^a-z0-9]/gi, '_');
+  const formId = `form-${safeId}-${context}`;
+  const rowsId = `rows-${safeId}-${context}`;
+
+  return `
+  <div class="bind-form" id="${formId}">
+    <h4>Привязка кампании ${campId}</h4>
+    <div class="bind-rows" id="${rowsId}">
+      ${makePickerRow()}
+    </div>
+    <div style="margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="addBindRow('${rowsId}')">+ Добавить артикул</button>
+    </div>
+    <div class="weight-hint">
+      💡 Если % не указаны — расход делится поровну.<br>
+      Если указаны — сумма % может быть любой (нормируется автоматически).
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveMapping('${campId}','${rowsId}','${formId}')">
+        💾 Сохранить
+      </button>
+      <button class="btn btn-ghost" onclick="closeForm('${formId}')">Отмена</button>
+    </div>
+  </div>`;
+}
+
+function toggleBindForm(campId, context) {
+  const safeId = campId.replace(/[^a-z0-9]/gi, '_');
+  const formId = `form-${safeId}-${context}`;
+  const el = document.getElementById(formId);
+  if (!el) return;
+  el.classList.toggle('open');
+}
+
+function closeForm(formId) {
+  document.getElementById(formId)?.classList.remove('open');
+}
+
+function addBindRow(rowsId) {
+  const container = document.getElementById(rowsId);
+  container?.insertAdjacentHTML('beforeend', makePickerRow());
+}
+
+function delBindRow(btn) {
+  const container = btn.closest('.bind-rows');
+  if (container.children.length <= 1) {
+    toast('Нужен хотя бы один артикул', 'err');
+    return;
+  }
+  btn.closest('.bind-row').remove();
+}
+
+// ── Сохранение маппинга ────────────────────────────────────
+async function saveMapping(campId, rowsId, formId) {
+  const container = document.getElementById(rowsId);
+  const rows      = Array.from(container.querySelectorAll('.bind-row'));
+
+  const entries = [];
+  for (const row of rows) {
+    const picker = row.querySelector('.art-picker');
+    const artId  = parseInt(picker?.dataset.articleId || '');
+    const pct    = parseFloat(row.querySelector('input[type=number]').value);
+    if (!artId) { toast('Выберите артикул из списка в каждой строке', 'err'); return; }
+    entries.push({ article_id: artId, weight: isNaN(pct) ? null : pct });
+  }
+
+  // Нормируем веса если заданы
+  const weights = entries.map(e => e.weight);
+  const allNull = weights.every(w => w === null);
+  if (!allNull) {
+    const total = weights.reduce((s, w) => s + (w || 0), 0);
+    if (total <= 0) { toast('Сумма % должна быть больше нуля', 'err'); return; }
+    entries.forEach(e => {
+      e.weight = e.weight !== null ? +(e.weight / total).toFixed(4) : +(1 / entries.length).toFixed(4);
+    });
+  }
+
+  try {
+    // Удаляем старые маппинги этой кампании
+    const existing = ALL_MAPPINGS.filter(m => m.campaign_id == campId);
+    for (const m of existing) {
+      await sbDelete(`campaign_article_map?id=eq.${m.id}`);
+    }
+
+    // Вставляем новые
+    const toInsert = entries.map(e => ({
+      campaign_id: campId,
+      article_id:  e.article_id,
+      marketplace: 'wb',
+      weight:      allNull ? null : e.weight,
+      note:        'добавлено через интерфейс',
+    }));
+    await sbPost('campaign_article_map', toInsert);
+
+    toast('✓ Маппинг сохранён', 'ok');
+    closeForm(formId);
+    await Promise.all([loadUnattributed(), loadMappings()]);
+  } catch (e) {
+    toast('Ошибка сохранения: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+// ── Удаление записи маппинга ──────────────────────────────
+async function deleteMapping(id) {
+  if (!confirm('Удалить эту привязку?')) return;
+  try {
+    await sbDelete(`campaign_article_map?id=eq.${id}`);
+    toast('Привязка удалена', 'ok');
+    await Promise.all([loadUnattributed(), loadMappings()]);
+  } catch (e) {
+    toast('Ошибка удаления: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+</script>
+</body>
+</html>
