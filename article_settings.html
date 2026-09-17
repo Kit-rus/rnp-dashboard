@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Управление видимостью артикулов — РНП</title>
+<style>
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg:       #f7f7f7;
+  --card:     #ffffff;
+  --border:   #e2e2e2;
+  --border2:  #eeeeee;
+  --text:     #111111;
+  --text2:    #555555;
+  --text3:    #999999;
+  --accent:   #1d4ed8;
+  --accent-h: #1e40af;
+  --ok:       #1d9e75;
+  --ok-bg:    rgba(29,158,117,0.09);
+  --err:      #e24b4a;
+  --err-bg:   rgba(226,75,74,0.09);
+  --warn:     #d97706;
+  --warn-bg:  rgba(217,119,6,0.09);
+  --r:        8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px }
+
+/* ── Login ─────────────────────────────────────────────── */
+#loginOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 999;
+}
+#loginBox {
+  background: var(--card); border-radius: 12px; padding: 36px 44px;
+  width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 16px;
+}
+#loginBox h2 { font-size: 18px; font-weight: 600; text-align: center }
+#loginBox p  { font-size: 12px; color: var(--text3); text-align: center; margin-top: -6px }
+#loginBox input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: var(--r); font-size: 15px; outline: none; transition: border-color .15s;
+}
+#loginBox input:focus { border-color: var(--accent) }
+#loginBox button {
+  width: 100%; padding: 11px; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--r); font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: background .15s;
+}
+#loginBox button:hover { background: var(--accent-h) }
+#loginErr { color: var(--err); font-size: 12px; text-align: center; min-height: 16px }
+
+/* ── App ────────────────────────────────────────────────── */
+#app { display: none; max-width: 1000px; margin: 0 auto; padding: 28px 20px }
+
+header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;
+}
+header h1 { font-size: 20px; font-weight: 600 }
+header .back {
+  font-size: 12px; color: var(--text3); text-decoration: none;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--r);
+  transition: color .15s, border-color .15s;
+}
+header .back:hover { color: var(--text); border-color: var(--text2) }
+
+/* ── Info bar ───────────────────────────────────────────── */
+.info-bar {
+  background: var(--ok-bg); border: 1px solid rgba(29,158,117,0.2);
+  border-radius: var(--r); padding: 10px 14px; margin-bottom: 20px;
+  font-size: 12px; color: var(--ok); line-height: 1.6;
+}
+
+/* ── Controls bar ───────────────────────────────────────── */
+.ctrl-bar {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+}
+.ctrl-bar input[type="text"] {
+  flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--r); font-size: 13px; outline: none; transition: border-color .15s;
+}
+.ctrl-bar input[type="text"]:focus { border-color: var(--accent) }
+.filter-btn {
+  padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--card); font-size: 12px; cursor: pointer; color: var(--text2);
+  transition: all .15s; white-space: nowrap;
+}
+.filter-btn.active { background: var(--text); color: #fff; border-color: var(--text) }
+.filter-btn:hover:not(.active) { border-color: var(--text2); color: var(--text) }
+#hiddenCount {
+  font-size: 12px; color: var(--text3); white-space: nowrap;
+  padding: 7px 0;
+}
+
+/* ── Table ──────────────────────────────────────────────── */
+.tbl-wrap { border: 1px solid var(--border2); border-radius: var(--r); overflow: hidden }
+table { width: 100%; border-collapse: collapse; font-size: 13px }
+thead th {
+  background: var(--bg); font-size: 11px; font-weight: 500; color: var(--text3);
+  padding: 10px 12px; border-bottom: 1px solid var(--border2); text-align: left;
+  white-space: nowrap;
+}
+tbody tr { background: var(--card) }
+tbody tr:not(:last-child) { border-bottom: 1px solid var(--border2) }
+tbody tr:hover { background: #f9f9f9 }
+td { padding: 10px 12px; vertical-align: middle }
+.cat-pill {
+  display: inline-block; font-size: 10px; padding: 2px 7px;
+  border-radius: 10px; background: var(--bg); border: 1px solid var(--border2);
+  color: var(--text2); white-space: nowrap;
+}
+.mp-pill {
+  display: inline-block; font-size: 10px; padding: 2px 7px;
+  border-radius: 10px; font-weight: 500; white-space: nowrap;
+}
+.mp-pill.wb   { background: rgba(203,17,171,0.1); color: #CB11AB }
+.mp-pill.ozon { background: rgba(0,91,255,0.1); color: #005bff }
+.art-name { font-weight: 500 }
+.art-sub  { font-size: 11px; color: var(--text3); margin-top: 1px }
+
+/* Visibility picker */
+.vis-wrap { display: flex; align-items: center; gap: 8px }
+select.vis-sel {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; color: var(--text); background: var(--card); outline: none;
+  cursor: pointer; transition: border-color .15s;
+}
+select.vis-sel:focus { border-color: var(--accent) }
+select.vis-sel.has-rule { border-color: var(--warn); color: var(--warn) }
+.vis-clear {
+  font-size: 11px; padding: 4px 8px; border: 1px solid var(--border2);
+  border-radius: 5px; background: transparent; cursor: pointer; color: var(--text3);
+  transition: all .15s;
+}
+.vis-clear:hover { color: var(--err); border-color: var(--err) }
+.save-flash {
+  font-size: 11px; color: var(--ok); font-weight: 500;
+  opacity: 0; transition: opacity .3s;
+}
+.save-flash.show { opacity: 1 }
+
+/* Hidden row styling */
+tr.is-hidden-row { opacity: 0.55 }
+tr.is-hidden-row td:first-child::before {
+  content: '🔴 ';
+}
+
+/* ── Toast ──────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #111; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 99;
+}
+#toast.show { opacity: 1 }
+
+/* ── Empty ──────────────────────────────────────────────── */
+.empty { padding: 40px; text-align: center; color: var(--text3); font-size: 13px }
+</style>
+</head>
+<body>
+
+<!-- ── Login ──────────────────────────────────────────────────── -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>Управление видимостью</h2>
+    <p>Войдите чтобы продолжить</p>
+    <input type="email" id="emailInput" placeholder="Email" autocomplete="email">
+    <input type="password" id="pwdInput" placeholder="Пароль" autocomplete="current-password">
+    <button onclick="doLogin()">Войти</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ── App ────────────────────────────────────────────────────── -->
+<div id="app">
+  <header>
+    <h1>👁️ Управление видимостью артикулов</h1>
+    <a href="rnp_v6_live.html" class="back">← Дашборд</a>
+  </header>
+
+  <div class="info-bar">
+    <strong>Ручное скрытие:</strong> укажите последний месяц, в котором артикул должен отображаться. Начиная со следующего — он исчезнет с дашборда.<br>
+    <strong>Автоскрытие:</strong> артикул также скрывается автоматически, если за просматриваемый месяц по нему не было заказов (исторические данные при этом сохраняются и доступны при выборе нужного месяца).
+  </div>
+
+  <div class="ctrl-bar">
+    <input type="text" id="searchInput" placeholder="Поиск по артикулу, названию, категории..." oninput="applyFilter()">
+    <button class="filter-btn active" id="btnAll"     onclick="setFilter('all',this)">Все</button>
+    <button class="filter-btn"        id="btnHidden"  onclick="setFilter('hidden',this)">Скрытые</button>
+    <button class="filter-btn"        id="btnVisible" onclick="setFilter('visible',this)">Активные</button>
+    <select onchange="filterByMP(this.value)" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;background:var(--card);outline:none;cursor:pointer">
+      <option value="">Все площадки</option>
+      <option value="wb">WB</option>
+      <option value="ozon">Ozon</option>
+    </select>
+    <div id="hiddenCount"></div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30%">Артикул</th>
+          <th>Категория</th>
+          <th>Площадка</th>
+          <th style="width:38%">Последний видимый месяц</th>
+        </tr>
+      </thead>
+      <tbody id="artTable">
+        <tr><td colspan="4" class="empty">Загрузка...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ─── Config ───────────────────────────────────────────────
+// БЫЛ service_role-ключ прямо в клиентском JS (полный доступ к БД в обход всех
+// RLS-политик) + фейковый логин (PWD='' пропускал вообще любой ввод). Реальная
+// уязвимость: страница никогда не публиковалась, но при публикации на GitHub
+// Pages любой читатель исходного кода получил бы полный доступ к базе. Заменено
+// на анонимный ключ + настоящий Supabase Auth логин, та же схема, что уже
+// работает в rnp_v6_live.html (см. migration_admin_pages_rls.sql — без неё
+// authenticated не может писать в article_visibility, только читать).
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+
+const MONTHS_RU = ['','Январь','Февраль','Март','Апрель','Май','Июнь',
+                   'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+// ─── State ────────────────────────────────────────────────
+let ALL_ARTICLES = [];      // [{id, seller_article, name, marketplace, category}]
+let VIS_RULES    = {};      // article_id → {id, last_visible_year, last_visible_month}
+let FILTER_TYPE  = 'all';   // 'all' | 'hidden' | 'visible'
+let FILTER_MP    = '';
+const NOW = new Date();
+const CUR_YEAR  = NOW.getFullYear();
+const CUR_MONTH = NOW.getMonth() + 1;
+
+// ─── Login (настоящий Supabase Auth, та же схема, что в rnp_v6_live.html) ──
+document.getElementById('pwdInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+async function doLogin() {
+  const email = document.getElementById('emailInput').value.trim();
+  const pass  = document.getElementById('pwdInput').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { CURRENT_SESSION = session; document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; initApp(); }
+})();
+
+// ─── API ──────────────────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${authToken()}` }
+  });
+  if (!r.ok) throw new Error(`GET ${path}: ${r.status}`);
+  return r.json();
+}
+async function sbPost(path, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${authToken()}`,
+               'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(`POST ${path}: ${r.status} ${t}`); }
+  return r.json();
+}
+async function sbPatch(path, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${authToken()}`,
+               'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(`PATCH ${path}: ${r.status} ${t}`); }
+  return r.json();
+}
+async function sbDelete(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${authToken()}` }
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(`DELETE ${path}: ${r.status} ${t}`); }
+}
+
+// ─── Init ─────────────────────────────────────────────────
+async function initApp() {
+  try {
+    const [arts, vis] = await Promise.all([
+      sbGet('articles?select=id,seller_article,name,marketplace,category&order=marketplace,category,seller_article&limit=2000'),
+      sbGet('article_visibility?select=*&limit=2000')
+    ]);
+    ALL_ARTICLES = arts;
+    VIS_RULES = {};
+    for (const v of vis) VIS_RULES[v.article_id] = v;
+    renderTable();
+  } catch(e) {
+    document.getElementById('artTable').innerHTML =
+      `<tr><td colspan="4" class="empty" style="color:#e24b4a">Ошибка загрузки: ${e.message}</td></tr>`;
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+function isHidden(art) {
+  const rule = VIS_RULES[art.id];
+  if (!rule) return false;
+  const ly = rule.last_visible_year, lm = rule.last_visible_month;
+  return CUR_YEAR > ly || (CUR_YEAR === ly && CUR_MONTH > lm);
+}
+
+function makeMonthOptions(selYear, selMonth) {
+  let html = '<option value="">Всегда показывать</option>';
+  // Generate months: past 3 years + next 1 year
+  const startYear = CUR_YEAR - 2;
+  const endYear   = CUR_YEAR + 1;
+  for (let y = endYear; y >= startYear; y--) {
+    const mEnd = (y === CUR_YEAR) ? CUR_MONTH : 12;
+    const mStart = 1;
+    for (let m = mEnd; m >= mStart; m--) {
+      const val = `${y}-${m}`;
+      const lbl = `${MONTHS_RU[m]} ${y}`;
+      const sel = (selYear === y && selMonth === m) ? ' selected' : '';
+      html += `<option value="${val}"${sel}>${lbl}</option>`;
+    }
+  }
+  return html;
+}
+
+// ─── Render ───────────────────────────────────────────────
+function setFilter(type, btn) {
+  FILTER_TYPE = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+function filterByMP(mp) { FILTER_MP = mp; renderTable(); }
+function applyFilter() { renderTable(); }
+
+function renderTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  let arts = ALL_ARTICLES;
+
+  // Text search
+  if (q) arts = arts.filter(a =>
+    (a.seller_article||'').toLowerCase().includes(q) ||
+    (a.name||'').toLowerCase().includes(q) ||
+    (a.category||'').toLowerCase().includes(q)
+  );
+
+  // MP filter
+  if (FILTER_MP) arts = arts.filter(a => a.marketplace === FILTER_MP);
+
+  // Status filter
+  if (FILTER_TYPE === 'hidden')  arts = arts.filter(a => isHidden(a));
+  if (FILTER_TYPE === 'visible') arts = arts.filter(a => !isHidden(a));
+
+  // Count
+  const hiddenCount = ALL_ARTICLES.filter(a => isHidden(a)).length;
+  document.getElementById('hiddenCount').textContent =
+    `Скрытых: ${hiddenCount} из ${ALL_ARTICLES.length}`;
+
+  if (!arts.length) {
+    document.getElementById('artTable').innerHTML =
+      `<tr><td colspan="4" class="empty">Ничего не найдено</td></tr>`;
+    return;
+  }
+
+  let html = '';
+  for (const art of arts) {
+    const rule    = VIS_RULES[art.id];
+    const hidden  = isHidden(art);
+    const ly      = rule ? rule.last_visible_year  : null;
+    const lm      = rule ? rule.last_visible_month : null;
+    const mpCls   = art.marketplace === 'wb' ? 'wb' : 'ozon';
+    const mpLbl   = art.marketplace === 'wb' ? 'WB' : 'Ozon';
+
+    html += `<tr class="${hidden ? 'is-hidden-row' : ''}" data-id="${art.id}">
+      <td>
+        <div class="art-name">${art.seller_article || '—'}</div>
+        <div class="art-sub">${art.name || ''}</div>
+      </td>
+      <td><span class="cat-pill">${art.category || '—'}</span></td>
+      <td><span class="mp-pill ${mpCls}">${mpLbl}</span></td>
+      <td>
+        <div class="vis-wrap">
+          <select class="vis-sel${rule ? ' has-rule' : ''}" id="sel_${art.id}"
+                  onchange="onSelChange(${art.id}, this)">
+            ${makeMonthOptions(ly, lm)}
+          </select>
+          ${rule ? `<button class="vis-clear" onclick="clearRule(${art.id})" title="Убрать правило — всегда показывать">✕ Сбросить</button>` : ''}
+          <span class="save-flash" id="flash_${art.id}">✓ Сохранено</span>
+        </div>
+      </td>
+    </tr>`;
+  }
+  document.getElementById('artTable').innerHTML = html;
+}
+
+// ─── Save / clear ─────────────────────────────────────────
+async function onSelChange(artId, sel) {
+  const val = sel.value;
+  if (!val) { await clearRule(artId); return; }
+  const [y, m] = val.split('-').map(Number);
+  await saveRule(artId, y, m);
+}
+
+async function saveRule(artId, year, month) {
+  try {
+    const existing = VIS_RULES[artId];
+    if (existing) {
+      await sbPatch(`article_visibility?id=eq.${existing.id}`, {
+        last_visible_year: year, last_visible_month: month,
+        updated_at: new Date().toISOString()
+      });
+      VIS_RULES[artId] = { ...existing, last_visible_year: year, last_visible_month: month };
+    } else {
+      const res = await sbPost('article_visibility', {
+        article_id: artId, last_visible_year: year, last_visible_month: month
+      });
+      if (res && res[0]) VIS_RULES[artId] = res[0];
+    }
+    showFlash(artId);
+    renderTable();
+  } catch(e) {
+    showToast('Ошибка: ' + e.message, true);
+  }
+}
+
+async function clearRule(artId) {
+  try {
+    const existing = VIS_RULES[artId];
+    if (existing) {
+      await sbDelete(`article_visibility?id=eq.${existing.id}`);
+      delete VIS_RULES[artId];
+    }
+    showFlash(artId);
+    renderTable();
+  } catch(e) {
+    showToast('Ошибка: ' + e.message, true);
+  }
+}
+
+// ─── UI helpers ───────────────────────────────────────────
+function showFlash(artId) {
+  const el = document.getElementById('flash_' + artId);
+  if (!el) return;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+let toastTimer;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#e24b4a' : '#111';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
