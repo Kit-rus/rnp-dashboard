@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit-экономика — ABELLO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#f4f4f5;--card:#fff;--border:#e4e4e7;--border2:#f0f0f2;
+  --text:#18181b;--text2:#52525b;--text3:#a1a1aa;
+  --accent:#2563eb;--accent-h:#1d4ed8;
+  --ok:#16a34a;--ok-bg:rgba(22,163,74,.08);
+  --err:#dc2626;--err-bg:rgba(220,38,38,.08);
+  --warn:#d97706;
+  --r:8px;--r2:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+
+/* Login */
+#loginOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;z-index:999}
+#loginBox{background:var(--card);border-radius:12px;padding:36px 44px;width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px}
+#loginBox h2{font-size:17px;font-weight:600;text-align:center}
+#loginBox p{font-size:11px;color:var(--text3);text-align:center;margin-top:-6px}
+#loginBox input{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:var(--r);font-size:14px;outline:none;transition:border-color .15s}
+#loginBox input:focus{border-color:var(--accent)}
+#loginBox button{width:100%;padding:10px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer}
+#loginBox button:hover{background:var(--accent-h)}
+#loginErr{color:var(--err);font-size:11px;text-align:center;min-height:14px}
+
+/* App */
+#app{display:none;max-width:1200px;margin:0 auto;padding:20px 16px}
+
+/* Header */
+.pg-hdr{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.pg-hdr h1{font-size:17px;font-weight:600}
+.pg-hdr a{font-size:11px;color:var(--text3);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);transition:all .15s}
+.pg-hdr a:hover{color:var(--text);border-color:var(--text2)}
+
+/* Controls */
+.ctrl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mp-tabs{display:flex;gap:4px}
+.mpt{padding:5px 14px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--card);font-size:12px;cursor:pointer;color:var(--text2);
+  font-family:var(--font);transition:all .15s}
+.mpt.wb{background:#CB11AB;border-color:#CB11AB;color:#fff}
+.mpt.oz{background:#005bff;border-color:#005bff;color:#fff}
+.sel{padding:5px 8px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:11px;background:var(--card);color:var(--text);font-family:var(--font);outline:none;cursor:pointer}
+.save-all-btn{margin-left:auto;padding:6px 16px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.save-all-btn:hover{background:var(--accent-h)}
+
+/* Defaults panel */
+.def-panel{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);margin-bottom:14px;overflow:hidden}
+.def-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;cursor:pointer;user-select:none}
+.def-hdr h3{font-size:12px;font-weight:600;color:var(--text2)}
+.def-hdr span{font-size:10px;color:var(--text3)}
+.def-body{padding:14px;border-top:1px solid var(--border2);
+  display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.def-field{display:flex;flex-direction:column;gap:4px}
+.def-field label{font-size:10px;color:var(--text3);font-weight:500;white-space:nowrap}
+.def-field input{width:88px;padding:6px 8px;border:1px solid var(--border);
+  border-radius:var(--r2);font-size:12px;outline:none;font-family:var(--font);text-align:right}
+.def-field input:focus{border-color:var(--accent)}
+.def-sep{width:1px;height:40px;background:var(--border2);align-self:flex-end}
+.def-save{padding:6px 14px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.def-save:hover{background:var(--accent-h)}
+.def-flash{font-size:11px;color:var(--ok);opacity:0;transition:opacity .3s;align-self:center}
+.def-flash.show{opacity:1}
+
+/* Category defaults table */
+.cat-def-sec{padding:0 14px 14px;border-top:1px solid var(--border2)}
+.cat-def-sec .sec-hd{font-size:10px;font-weight:600;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.4px;padding:10px 0 8px}
+.cat-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.cat-tbl th{font-size:10px;font-weight:500;color:var(--text3);
+  padding:5px 8px;border-bottom:1px solid var(--border2);text-align:left}
+.cat-tbl th:not(:first-child){text-align:right}
+.cat-tbl td{padding:5px 8px;border-bottom:1px solid var(--border2);vertical-align:middle}
+.cat-tbl td:not(:first-child){text-align:right}
+.cat-tbl td:first-child{font-weight:500;color:var(--text2)}
+.cat-inp{width:72px;padding:4px 7px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:12px;text-align:right;outline:none;font-family:var(--font)}
+.cat-inp:focus{border-color:var(--accent)}
+.cat-inp.has-val{border-color:#93c5fd;background:#eff6ff}
+.cat-badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:10px;
+  vertical-align:middle;margin-left:4px}
+.cat-badge.ok{background:var(--ok-bg);color:var(--ok)}
+.cat-badge.def{background:var(--border2);color:var(--text3)}
+
+/* Summary strip */
+.sum-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px}
+.sl{font-size:9px;color:var(--text3);font-weight:500;margin-bottom:2px;text-transform:uppercase}
+.sv{font-size:14px;font-weight:600;color:var(--text);line-height:1.2}
+.sv.ok{color:var(--ok)}.sv.err{color:var(--err)}
+
+/* Article cards */
+.art-list{display:flex;flex-direction:column;gap:5px}
+
+/* Compact row — grid: [name] [ord] [buy%] [buy] [price] [rev] [marg%] [net%] [btn] */
+.art-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .15s}
+.art-card.has-data{border-left:3px solid var(--accent)}
+.art-card.expanded{border-color:#bfdbfe}
+.art-compact{
+  display:grid;
+  grid-template-columns:minmax(160px,2fr) 72px 72px 72px 90px 100px 70px 70px auto;
+  align-items:center;gap:6px;padding:8px 10px;cursor:pointer
+}
+.art-compact:hover{background:#fafafa}
+
+.cn{font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.csub{font-size:9px;color:var(--text3);margin-top:1px}
+.cv{font-size:12px;font-weight:500;text-align:right;color:var(--text)}
+.cvl{font-size:9px;color:var(--text3);text-align:right}
+.cv.ok{color:var(--ok)}.cv.err{color:var(--err)}
+
+.exp-btn{font-size:10px;color:var(--text3);padding:3px 8px;
+  border:1px solid var(--border);border-radius:4px;background:transparent;
+  cursor:pointer;white-space:nowrap;font-family:var(--font);transition:all .15s}
+.exp-btn:hover{color:var(--text);border-color:var(--text2)}
+.art-card.expanded .exp-btn{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Detail */
+.art-det{display:none;border-top:1px solid var(--border2);padding:14px}
+.art-card.expanded .art-det{display:block}
+
+/* Section label */
+.slbl{font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:8px}
+
+/* --- Volume section --- */
+.vol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.vol-card{background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2);padding:10px 12px}
+.vol-card label{font-size:10px;color:var(--text3);display:block;margin-bottom:5px}
+.vol-card input{width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:13px;font-weight:500;outline:none;font-family:var(--font);text-align:right}
+.vol-card input:focus{border-color:var(--accent)}
+.vol-card input.calc-field{background:var(--bg);color:var(--text2);border-style:dashed;cursor:default}
+.vol-card .calc-hint{font-size:9px;color:var(--text3);margin-top:4px}
+.buyout-calc{font-size:11px;color:var(--text2);padding:7px 8px;background:var(--bg);
+  border:1px dashed var(--border);border-radius:var(--r2);font-weight:500;text-align:right}
+
+/* --- Price bands --- */
+.bands-wrap{margin-bottom:16px}
+.band-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.band-inp{padding:6px 8px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:12px;outline:none;font-family:var(--font);text-align:right}
+.band-inp:focus{border-color:var(--accent)}
+.band-sep{font-size:11px;color:var(--text3)}
+.band-del{background:none;border:none;cursor:pointer;font-size:13px;color:var(--text3);
+  padding:2px 4px;border-radius:3px;line-height:1}
+.band-del:hover{color:var(--err)}
+.add-band{background:none;border:none;cursor:pointer;font-size:11px;color:var(--accent);
+  font-family:var(--font);padding:0}
+.add-band:hover{text-decoration:underline}
+.band-note{font-size:10px;color:var(--text3);margin-top:4px}
+
+/* --- P&L table --- */
+.pl-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px}
+.pl-tbl th{font-size:10px;font-weight:500;color:var(--text3);padding:6px 8px;
+  border-bottom:1px solid var(--border2);text-align:right}
+.pl-tbl th:first-child{text-align:left}
+.pl-tbl td{padding:5px 8px;border-bottom:1px solid var(--border2);vertical-align:middle;text-align:right}
+.pl-tbl td:first-child{text-align:left;color:var(--text2)}
+.pl-tbl tr.hdr-row td{font-weight:600;color:var(--text);background:var(--bg)}
+.pl-tbl tr.subtotal-row td{font-weight:600;background:rgba(37,99,235,.04)}
+.pl-tbl tr.total-row td{font-weight:700;font-size:13px;border-top:2px solid var(--border)}
+.pl-tbl tr.total-row.profit td{color:var(--ok)}
+.pl-tbl tr.total-row.loss td{color:var(--err)}
+.pl-tbl tr.indent td:first-child{padding-left:20px;color:var(--text3)}
+
+/* % override input */
+.pct-inp{width:64px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:11px;text-align:right;outline:none;font-family:var(--font)}
+.pct-inp:focus{border-color:var(--accent)}
+.pct-inp.is-def{color:var(--text3);border-style:dashed}
+/* cost input */
+.cost-inp{width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:11px;text-align:right;outline:none;font-family:var(--font)}
+.cost-inp:focus{border-color:var(--accent)}
+
+.neg{color:var(--err)}.pos{color:var(--ok)}
+
+/* Actions */
+.art-actions{display:flex;align-items:center;gap:10px;margin-top:6px}
+.save-btn{padding:6px 18px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.save-btn:hover{background:var(--accent-h)}
+.save-btn:disabled{opacity:.6;cursor:default}
+.art-flash{font-size:11px;color:var(--ok);font-weight:500;opacity:0;transition:opacity .3s}
+.art-flash.show{opacity:1}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#18181b;color:#fff;padding:10px 22px;border-radius:8px;
+  font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+#toast.show{opacity:1}
+
+.empty-msg{text-align:center;padding:40px;color:var(--text3);font-size:13px}
+
+/* Filter row */
+.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-bottom:10px;padding:8px 10px;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
+.filter-row label{font-size:10px;color:var(--text3);font-weight:500;white-space:nowrap}
+.filter-count{font-size:10px;color:var(--text3);margin-left:auto}
+.filter-reset{font-size:10px;color:var(--accent);background:none;border:none;
+  cursor:pointer;font-family:var(--font);padding:0;text-decoration:underline}
+.filter-reset:hover{color:var(--accent-h)}
+
+/* CSV buttons */
+.csv-btn{padding:5px 12px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font);
+  background:var(--card);color:var(--text2);transition:all .15s}
+.csv-btn:hover{border-color:var(--accent);color:var(--accent)}
+.csv-btn.upload{background:var(--accent);color:#fff;border-color:var(--accent)}
+.csv-btn.upload:hover{background:var(--accent-h)}
+
+/* Upload modal */
+#uploadModal{position:fixed;inset:0;background:rgba(0,0,0,.5);
+  display:none;align-items:center;justify-content:center;z-index:200}
+#uploadModal.open{display:flex}
+#uploadBox{background:var(--card);border-radius:12px;padding:28px 32px;
+  width:480px;max-width:96vw;display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.2)}
+#uploadBox h3{font-size:15px;font-weight:600}
+#uploadBox p{font-size:11px;color:var(--text2);line-height:1.5}
+.upload-drop{border:2px dashed var(--border);border-radius:var(--r);
+  padding:28px;text-align:center;cursor:pointer;transition:all .15s;position:relative}
+.upload-drop:hover,.upload-drop.drag{border-color:var(--accent);background:#eff6ff}
+.upload-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-drop span{font-size:12px;color:var(--text3);pointer-events:none}
+#uploadResult{font-size:11px;line-height:1.6;white-space:pre-wrap}
+#uploadResult.ok{color:var(--ok)}#uploadResult.err{color:var(--err)}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.modal-cancel{padding:7px 16px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);font-size:12px;cursor:pointer;font-family:var(--font)}
+.modal-ok{padding:7px 16px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.modal-ok:hover{background:var(--accent-h)}
+.modal-ok:disabled{opacity:.5;cursor:default}
+
+@media(max-width:900px){.art-compact{grid-template-columns:1fr auto}}
+@media(max-width:700px){.sum-strip{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>Unit-экономика</h2>
+    <p>Войдите чтобы продолжить</p>
+    <input type="email" id="emailIn" placeholder="Email" autocomplete="email">
+    <input type="password" id="pwdIn" placeholder="Пароль" autocomplete="current-password">
+    <button onclick="doLogin()">Войти</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="pg-hdr">
+    <h1>📋 Unit-экономика по артикулам</h1>
+    <a href="rnp_v6_live.html">← Дашборд</a>
+  </div>
+
+  <div class="ctrl-row">
+    <div class="mp-tabs">
+      <button class="mpt wb" id="bwb" onclick="setMP('wb')">WB</button>
+      <button class="mpt"    id="boz" onclick="setMP('oz')">Ozon</button>
+    </div>
+    <select class="sel" id="yearSel"  onchange="loadData()"></select>
+    <select class="sel" id="monthSel" onchange="loadData()"></select>
+    <button class="csv-btn" onclick="downloadTemplate()" title="Скачать шаблон .xlsx с артикулами и текущими данными плана">⬇ Шаблон xlsx</button>
+    <button class="csv-btn upload" onclick="openUploadModal()">⬆ Загрузить</button>
+    <button class="save-all-btn" onclick="saveAll()">💾 Сохранить всё</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-row" id="filterRow">
+    <label>Фильтры:</label>
+    <select class="sel" id="fCab" onchange="applyFilters()">
+      <option value="">Все кабинеты</option>
+    </select>
+    <select class="sel" id="fMgr" onchange="applyFilters()">
+      <option value="">Все менеджеры</option>
+    </select>
+    <select class="sel" id="fCat" onchange="applyFilters()">
+      <option value="">Все категории</option>
+    </select>
+    <span class="filter-count" id="filterCount"></span>
+    <button class="filter-reset" onclick="resetFilters()" id="filterResetBtn" style="display:none">× сбросить</button>
+  </div>
+
+  <!-- Default rates -->
+  <div class="def-panel">
+    <div class="def-hdr" onclick="toggleDef()">
+      <h3>⚙️ Ставки по умолчанию — <span id="defMpLbl">WB</span></h3>
+      <span id="defIcon">▼</span>
+    </div>
+    <div class="def-body" id="defBody" style="display:none">
+      <div class="def-field"><label>Комиссия МП %</label>
+        <input type="number" id="d-comm" step="0.1" min="0" max="100"></div>
+      <div class="def-field"><label>Эквайринг %</label>
+        <input type="number" id="d-acq"  step="0.1" min="0" max="100"></div>
+      <div class="def-field"><label>Логистика %</label>
+        <input type="number" id="d-log"  step="0.1" min="0" max="100"></div>
+      <div class="def-field"><label>Хранение %</label>
+        <input type="number" id="d-sto"  step="0.1" min="0" max="100"></div>
+      <div class="def-sep"></div>
+      <div class="def-field"><label>Выкупаемость % (дефолт)</label>
+        <input type="number" id="d-buyout" step="0.1" min="0" max="100" placeholder="70"></div>
+      <button class="def-save" onclick="saveDefaults()">Сохранить</button>
+      <span class="def-flash" id="defFlash">✓ Сохранено</span>
+    </div>
+    <!-- Category defaults (shown when panel open) -->
+    <div class="cat-def-sec" id="catDefSec" style="display:none">
+      <div class="sec-hd">Выкупаемость по категориям — <span id="catMpLbl">WB</span></div>
+      <div id="catDefTable"><!-- рендерится JS --></div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="sum-strip" id="sumStrip"></div>
+
+  <!-- Table header hint -->
+  <div style="display:grid;grid-template-columns:minmax(160px,2fr) 72px 72px 72px 90px 100px 70px 70px auto;
+    gap:6px;padding:4px 10px;margin-bottom:4px">
+    <div style="font-size:9px;color:var(--text3)">Артикул</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Заказы</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Выкуп %</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Продажи</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Ср. цена</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Выручка</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">Маржа</div>
+    <div style="font-size:9px;color:var(--text3);text-align:right">ЧП %</div>
+    <div></div>
+  </div>
+
+  <div class="art-list" id="artList">
+    <div class="empty-msg">Загрузка...</div>
+  </div>
+</div>
+
+<!-- Upload CSV modal -->
+<div id="uploadModal">
+  <div id="uploadBox">
+    <h3>📥 Загрузить план из CSV</h3>
+    <p>Загрузите файл в формате <strong>.xlsx</strong> (рекомендуется) или .csv.<br>
+    Строки сопоставляются по колонке <strong>Артикул</strong>. Пустые ячейки не перезаписывают данные в БД.</p>
+    <div class="upload-drop" id="uploadDrop">
+      <input type="file" accept=".xlsx,.csv" id="csvFileIn" onchange="handleCSVFile(this.files[0])">
+      <span id="uploadDropLabel">Нажмите или перетащите .xlsx или .csv файл</span>
+    </div>
+    <div id="uploadResult"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeUploadModal()">Отмена</button>
+      <button class="modal-ok" id="uploadConfirmBtn" disabled onclick="confirmUpload()">Загрузить в БД</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── Config ────────────────────────────────────────────────────
+// БЫЛ service_role-ключ в открытом JS + пароль '' (пропускал любой ввод) —
+// реальная уязвимость при публикации. Заменено на анонимный ключ + настоящий
+// Supabase Auth логин, та же схема, что в rnp_v6_live.html. Требует
+// migration_admin_pages_rls.sql (права записи authenticated в monthly_plans/articles).
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+const MP_DB = {wb:'wb', oz:'ozon'};
+const MONTHS_RU = ['','Январь','Февраль','Март','Апрель','Май','Июнь',
+                   'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+// ── State ─────────────────────────────────────────────────────
+let CMP = 'wb';
+let CYEAR  = new Date().getFullYear();
+let CMONTH = new Date().getMonth() + 1;
+let ARTICLES    = [];
+let PLANS       = {};   // article_id → plan object (from DB + _edits)
+let DEFAULTS    = {};   // marketplace_db → plan_defaults row
+let CAT_DEFAULTS= {};   // `${marketplace}_${category}` → plan_category_defaults row
+let DEF_OPEN    = false;
+const EXPANDED  = new Set();
+
+// Filters
+let F_CAB = '', F_MGR = '', F_CAT = '';
+let CSV_PENDING = null;  // parsed CSV rows waiting for DB confirm
+let VIS_RULES  = {};     // seller_article → {last_visible_year, last_visible_month}
+let ACTIVE_IDS = null;  // Set<article_id> с заказами за выбранный месяц; null = не загружены
+
+// ── Login (настоящий Supabase Auth) ─────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('emailIn').value.trim();
+  const pass  = document.getElementById('pwdIn').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initPage();
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { CURRENT_SESSION = session; document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; initPage(); }
+})();
+
+// ── API ───────────────────────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: {apikey: SB_ANON, Authorization: `Bearer ${authToken()}`}
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbUpsert(table, body, onConflict) {
+  const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
+  const r = await fetch(`${SB_URL}/rest/v1/${table}${qs}`, {
+    method: 'POST',
+    headers: {apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+               'Content-Type': 'application/json',
+               'Prefer': 'resolution=merge-duplicates,return=representation'},
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Visibility rules ──────────────────────────────────────────
+async function loadVisibilityRules() {
+  try {
+    const rows = await sbGet(
+      'article_visibility?select=last_visible_year,last_visible_month,articles(seller_article)&limit=2000'
+    );
+    VIS_RULES = {};
+    for (const r of rows) {
+      if (r.articles) VIS_RULES[r.articles.seller_article] = {
+        last_visible_year:  r.last_visible_year,
+        last_visible_month: r.last_visible_month,
+      };
+    }
+  } catch(e) { console.warn('loadVisibilityRules:', e.message); }
+}
+
+// Загружаем article_id, у которых были заказы в выбранном месяце
+// Для будущих месяцев — не ограничиваем (нет данных ещё)
+async function loadActiveIds(mpDb) {
+  const now = new Date();
+  const isFuture = CYEAR > now.getFullYear() ||
+    (CYEAR === now.getFullYear() && CMONTH > now.getMonth() + 1);
+  if (isFuture) { ACTIVE_IDS = null; return; }  // нет смысла — заказов ещё нет
+
+  const pad = n => String(n).padStart(2,'0');
+  const start = `${CYEAR}-${pad(CMONTH)}-01`;
+  const end   = `${CYEAR}-${pad(CMONTH)}-31`;
+  try {
+    const rows = await sbGet(
+      `daily_metrics?select=article_id&orders_qty=gt.0` +
+      `&date=gte.${start}&date=lte.${end}&limit=5000`
+    );
+    ACTIVE_IDS = new Set(rows.map(r => r.article_id));
+  } catch(e) { console.warn('loadActiveIds:', e.message); ACTIVE_IDS = null; }
+}
+
+// Артикул показывается если:
+//  1. Не скрыт вручную (article_visibility)
+//  2. Имел заказы в выбранном месяце (авто) ИЛИ у него уже стоит план ИЛИ месяц ещё не наступил
+function isArticleVisible(art, hasPlan) {
+  // 1. Ручное скрытие
+  const rule = VIS_RULES[art.seller_article];
+  if (rule) {
+    const {last_visible_year: ly, last_visible_month: lm} = rule;
+    if (CYEAR > ly || (CYEAR === ly && CMONTH > lm)) return false;
+  }
+  // 2. Авто-скрытие по заказам (только для прошлых/текущего месяца)
+  if (ACTIVE_IDS !== null && !ACTIVE_IDS.has(art.id) && !hasPlan) return false;
+  return true;
+}
+
+// ── Init ──────────────────────────────────────────────────────
+async function initPage() {
+  const now = new Date();
+  CYEAR  = now.getFullYear();
+  CMONTH = now.getMonth() + 1;
+
+  const yr = document.getElementById('yearSel');
+  for (let y = CYEAR + 1; y >= CYEAR - 2; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y; if (y === CYEAR) o.selected = true;
+    yr.appendChild(o);
+  }
+  const ms = document.getElementById('monthSel');
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = MONTHS_RU[m]; if (m === CMONTH) o.selected = true;
+    ms.appendChild(o);
+  }
+  try {
+    const defs = await sbGet('plan_defaults?select=*');
+    DEFAULTS = {};
+    for (const d of defs) DEFAULTS[d.marketplace] = d;
+  } catch(e) { showToast('Ошибка загрузки ставок: ' + e.message, true); }
+  updateDefForm();
+  await Promise.all([loadCategoryDefaults(), loadVisibilityRules()]);
+  await loadData();
+}
+
+// ── Defaults ──────────────────────────────────────────────────
+function toggleDef() {
+  DEF_OPEN = !DEF_OPEN;
+  const show = DEF_OPEN ? 'flex' : 'none';
+  document.getElementById('defBody').style.display = show;
+  document.getElementById('catDefSec').style.display = DEF_OPEN ? 'block' : 'none';
+  document.getElementById('defIcon').textContent = DEF_OPEN ? '▲' : '▼';
+}
+function updateDefForm() {
+  const mp = MP_DB[CMP];
+  document.getElementById('defMpLbl').textContent = CMP.toUpperCase();
+  const d = DEFAULTS[mp] || {};
+  document.getElementById('d-comm').value   = d.commission_pct ?? '';
+  document.getElementById('d-acq').value    = d.acquiring_pct  ?? '';
+  document.getElementById('d-log').value    = d.logistics_pct  ?? '';
+  document.getElementById('d-sto').value    = d.storage_pct    ?? '';
+  document.getElementById('d-buyout').value = d.buyout_pct     ?? '';
+}
+// ── Category defaults ─────────────────────────────────────────
+async function loadCategoryDefaults() {
+  const mpDb = MP_DB[CMP];
+  try {
+    const rows = await sbGet(`plan_category_defaults?select=*&marketplace=eq.${mpDb}&limit=200`);
+    for (const r of rows) {
+      CAT_DEFAULTS[`${r.marketplace}_${r.category}`] = r;
+    }
+  } catch(e) { console.warn('loadCategoryDefaults:', e.message); }
+}
+
+function renderCatDefaults() {
+  const mpDb = MP_DB[CMP];
+  document.getElementById('catMpLbl').textContent = CMP.toUpperCase();
+  const cats = [...new Set(ARTICLES.map(a => a.category).filter(Boolean))].sort();
+  if (!cats.length) {
+    document.getElementById('catDefTable').innerHTML =
+      '<div style="font-size:11px;color:var(--text3);padding:8px 0">Загрузите данные чтобы увидеть категории</div>';
+    return;
+  }
+  const def = DEFAULTS[mpDb] || {};
+  let html = `<table class="cat-tbl"><thead><tr>
+    <th>Категория</th>
+    <th>% выкупа <span style="font-weight:400;opacity:.7">(дефолт ${def.buyout_pct||'—'}%)</span></th>
+    <th>Комиссия % <span style="font-weight:400;opacity:.7">(дефолт ${def.commission_pct||'—'}%)</span></th>
+    <th>Логистика % <span style="font-weight:400;opacity:.7">(дефолт ${def.logistics_pct||'—'}%)</span></th>
+  </tr></thead><tbody>`;
+
+  for (const cat of cats) {
+    const key = `${mpDb}_${cat}`;
+    const cd  = CAT_DEFAULTS[key] || {};
+    const hasBuyout  = cd.buyout_pct     !== null && cd.buyout_pct     !== undefined;
+    const hasComm    = cd.commission_pct !== null && cd.commission_pct !== undefined;
+    const hasLog     = cd.logistics_pct  !== null && cd.logistics_pct  !== undefined;
+    const catJ = JSON.stringify(cat).replace(/'/g, "\\'");
+    html += `<tr>
+      <td>${cat}${hasBuyout||hasComm||hasLog?'<span class="cat-badge ok">✓ задано</span>':'<span class="cat-badge def">дефолт МП</span>'}</td>
+      <td><input class="cat-inp${hasBuyout?' has-val':''}" type="number" step="0.1" min="0" max="100"
+        placeholder="${def.buyout_pct||''}" value="${hasBuyout?cd.buyout_pct:''}"
+        onchange="saveCatDefault(${catJ},'buyout_pct',this.value,this)"
+        title="Оставьте пустым — будет использоваться дефолт площадки"></td>
+      <td><input class="cat-inp${hasComm?' has-val':''}" type="number" step="0.1" min="0" max="100"
+        placeholder="${def.commission_pct||''}" value="${hasComm?cd.commission_pct:''}"
+        onchange="saveCatDefault(${catJ},'commission_pct',this.value,this)"></td>
+      <td><input class="cat-inp${hasLog?' has-val':''}" type="number" step="0.1" min="0" max="100"
+        placeholder="${def.logistics_pct||''}" value="${hasLog?cd.logistics_pct:''}"
+        onchange="saveCatDefault(${catJ},'logistics_pct',this.value,this)"></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  html += '<div style="font-size:10px;color:var(--text3);margin-top:8px">Пустое поле = берётся дефолт площадки. Приоритет: <strong>артикул</strong> › <strong>категория</strong> › <strong>площадка</strong>.</div>';
+  document.getElementById('catDefTable').innerHTML = html;
+}
+
+async function saveCatDefault(category, field, rawVal, inp) {
+  const mpDb = MP_DB[CMP];
+  const key  = `${mpDb}_${category}`;
+  const val  = rawVal.trim() === '' ? null : parseFloat(rawVal);
+
+  // Build upsert payload — preserve existing fields
+  const existing = CAT_DEFAULTS[key] || {};
+  const payload  = {
+    marketplace: mpDb,
+    category,
+    buyout_pct:     field === 'buyout_pct'     ? val : (existing.buyout_pct     ?? null),
+    commission_pct: field === 'commission_pct' ? val : (existing.commission_pct ?? null),
+    logistics_pct:  field === 'logistics_pct'  ? val : (existing.logistics_pct  ?? null),
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    const res = await sbUpsert('plan_category_defaults', payload, 'marketplace,category');
+    if (res && res[0]) CAT_DEFAULTS[key] = res[0];
+    if (inp) inp.classList.toggle('has-val', val !== null);
+    // Re-render articles so new defaults are reflected
+    renderAll();
+  } catch(e) { showToast('Ошибка: ' + e.message, true); }
+}
+
+async function saveDefaults() {
+  const mp = MP_DB[CMP];
+  const body = {
+    marketplace: mp,
+    commission_pct: parseFloat(document.getElementById('d-comm').value)   || 0,
+    acquiring_pct:  parseFloat(document.getElementById('d-acq').value)    || 0,
+    logistics_pct:  parseFloat(document.getElementById('d-log').value)    || 0,
+    storage_pct:    parseFloat(document.getElementById('d-sto').value)    || 0,
+    buyout_pct:     parseFloat(document.getElementById('d-buyout').value)  || 0,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await sbUpsert('plan_defaults', body, 'marketplace');
+    DEFAULTS[mp] = {...(DEFAULTS[mp] || {}), ...body};
+    const fl = document.getElementById('defFlash');
+    fl.classList.add('show'); setTimeout(() => fl.classList.remove('show'), 2000);
+    renderAll();
+  } catch(e) { showToast('Ошибка: ' + e.message, true); }
+}
+
+// ── Load ──────────────────────────────────────────────────────
+async function setMP(mp) {
+  CMP = mp;
+  document.getElementById('bwb').className = 'mpt' + (mp === 'wb' ? ' wb' : '');
+  document.getElementById('boz').className = 'mpt' + (mp === 'oz' ? ' oz' : '');
+  updateDefForm();
+  await loadCategoryDefaults();
+  await loadData();
+}
+async function loadData() {
+  CYEAR  = parseInt(document.getElementById('yearSel').value);
+  CMONTH = parseInt(document.getElementById('monthSel').value);
+  const mpDb = MP_DB[CMP];
+  document.getElementById('artList').innerHTML = '<div class="empty-msg">Загрузка...</div>';
+  try {
+    const [arts, plans] = await Promise.all([
+      sbGet(`articles?select=id,seller_article,name,category,marketplace,cabinet,manager&marketplace=eq.${mpDb}&order=category,seller_article&limit=1000`),
+      sbGet(`monthly_plans?select=*&year=eq.${CYEAR}&month=eq.${CMONTH}&limit=1000`),
+      loadVisibilityRules(),
+      loadActiveIds(mpDb),
+    ]);
+    // Строим набор article_id с уже заполненным планом
+    const planSet = new Set(plans.map(p => p.article_id));
+    ARTICLES = arts.filter(a => isArticleVisible(a, planSet.has(a.id)));
+    PLANS = {};
+    for (const p of plans) PLANS[p.article_id] = p;
+    buildFilterOptions();
+    renderCatDefaults();
+    renderAll();
+  } catch(e) {
+    document.getElementById('artList').innerHTML =
+      `<div class="empty-msg" style="color:var(--err)">Ошибка: ${e.message}</div>`;
+  }
+}
+
+// ── P&L Calculation ───────────────────────────────────────────
+// Key insight: Revenue is calculated on SALES (buyouts), not orders.
+//   Orders  = all placed orders
+//   Buyouts = confirmed sales = orders × buyout_rate%
+//   Revenue = buyouts × avg_price
+
+function getD() { return DEFAULTS[MP_DB[CMP]] || {}; }
+
+// Read editable field: check _edit first, then DB field, then default
+function ev(p, editKey, dbKey, defKey) {
+  const e = p[editKey];
+  if (e !== undefined && e !== '') return {v: parseFloat(e)||0, isDef: false};
+  if (p[dbKey]  !== null && p[dbKey]  !== undefined) return {v: parseFloat(p[dbKey])||0, isDef: false};
+  const dv = parseFloat(getD()[defKey] || 0);
+  return {v: dv, isDef: true};
+}
+// 4-level priority: edit > article DB > category default > marketplace default
+function evC(p, editKey, dbKey, catVal, defKey) {
+  const e = p[editKey];
+  if (e !== undefined && e !== '') return {v: parseFloat(e)||0, isDef: false};
+  if (p[dbKey]   !== null && p[dbKey]   !== undefined) return {v: parseFloat(p[dbKey]) ||0, isDef: false};
+  if (catVal     !== null && catVal     !== undefined) return {v: parseFloat(catVal)    ||0, isDef: false};
+  return {v: parseFloat(getD()[defKey] || 0), isDef: true};
+}
+
+function calcPL(artId) {
+  const p = PLANS[artId] || {};
+  const def = getD();
+
+  // ── Category defaults (priority: article > category > marketplace) ──
+  const _art = ARTICLES.find(a => a.id === artId);
+  const _catDef = (_art && _art.category)
+    ? (CAT_DEFAULTS[`${MP_DB[CMP]}_${_art.category}`] || {})
+    : {};
+
+  // ── Volume ──
+  const ordQty = parseFloat(p._orders ?? p.plan_orders_qty ?? 0);
+
+  // Buyout rate: edit > DB override > category default > marketplace default
+  const buyoutR = evC(p, '_buyout_pct', 'plan_buyout_pct', _catDef.buyout_pct, 'buyout_pct');
+  const buyoutPct = buyoutR.v;   // 0–100
+
+  // Confirmed sales (выкупы)
+  // User can also directly enter buyouts qty, which overrides the calculated value
+  let buyQty;
+  if (p._buyouts !== undefined && p._buyouts !== '') {
+    buyQty = parseFloat(p._buyouts) || 0;
+  } else if (p.plan_buyouts_qty !== null && p.plan_buyouts_qty !== undefined && !p._orders) {
+    buyQty = parseFloat(p.plan_buyouts_qty) || 0;
+  } else {
+    buyQty = buyoutPct > 0 ? Math.round(ordQty * buyoutPct / 100) : 0;
+  }
+
+  // Derived buyout% (for display when user enters buyouts directly)
+  const derivedBuyoutPct = ordQty > 0 ? (buyQty / ordQty * 100) : buyoutPct;
+
+  // ── Price (bands or single) ──
+  const bands = p._bands || (p.plan_price_bands
+    ? (typeof p.plan_price_bands === 'string' ? JSON.parse(p.plan_price_bands) : p.plan_price_bands)
+    : []);
+  let avgPrice;
+  if (bands.length > 0 && bands.some(b => (b.qty||0) > 0)) {
+    const totalBQ = bands.reduce((s,b)=>s+(b.qty||0),0);
+    avgPrice = totalBQ > 0 ? bands.reduce((s,b)=>s+(b.qty||0)*(b.price||0),0)/totalBQ : 0;
+  } else {
+    avgPrice = parseFloat(p._price ?? p.plan_price ?? 0);
+  }
+
+  // ── Revenue — based on SALES (buyouts) ──
+  const revenue = buyQty * avgPrice;
+
+  // ── Costs — all % applied to revenue (from confirmed sales) ──
+  const commR = evC(p, '_comm_pct', 'plan_commission_pct', _catDef.commission_pct, 'commission_pct');
+  const acqR  = ev (p, '_acq_pct',  'plan_acquiring_pct',                           'acquiring_pct');
+  const logR  = evC(p, '_log_pct',  'plan_logistics_pct',  _catDef.logistics_pct,  'logistics_pct');
+  const stoR  = ev(p, '_sto_pct',  'plan_storage_pct',    'storage_pct');
+  const advPct = parseFloat(p._adv_pct ?? p.plan_drr ?? 0);
+
+  const cp = commR.v, ap = acqR.v, lp = logR.v, sp = stoR.v, rp = advPct;
+
+  // per-unit costs (per sold unit)
+  const cu = avgPrice * cp / 100;
+  const au = avgPrice * ap / 100;
+  const lu = avgPrice * lp / 100;
+  const su = avgPrice * sp / 100;
+  const ru = avgPrice * rp / 100;
+  const mpCostU = cu + au + lu + su + ru;
+
+  const vc = parseFloat(p._var_cost ?? p.plan_variable_cost ?? 0);
+  const fc = parseFloat(p._fix_cost ?? p.plan_fixed_cost    ?? 0);
+
+  // P&L per sold unit
+  const grossU  = avgPrice - mpCostU;           // до себестоимости
+  const marginU = grossU  - vc;                 // маржинальная (до постоянных)
+  const netU    = marginU - fc;                 // чистая прибыль
+
+  // Totals
+  const cT=cu*buyQty, aT=au*buyQty, lT=lu*buyQty, sT=su*buyQty, rT=ru*buyQty;
+  const vcT=vc*buyQty, fcT=fc*buyQty;
+  const mpCostT = mpCostU*buyQty;
+  const grossT  = grossU *buyQty;
+  const margT   = marginU*buyQty;
+  const netT    = netU   *buyQty;
+
+  const marginPct = avgPrice > 0 ? marginU/avgPrice*100 : 0;
+  const netPct    = avgPrice > 0 ? netU   /avgPrice*100 : 0;
+
+  return {
+    ordQty, buyoutPct: derivedBuyoutPct, buyQty,
+    bands, avgPrice, revenue,
+    cp, ap, lp, sp, rp,
+    cu, au, lu, su, ru, vc, fc,
+    cT, aT, lT, sT, rT, vcT, fcT, mpCostT,
+    grossU, grossT,
+    marginU, margT, marginPct,
+    netU, netT, netPct,
+    isCpDef: commR.isDef, isApDef: acqR.isDef,
+    isLpDef: logR.isDef,  isSpDef: stoR.isDef,
+  };
+}
+
+// ── Formatting ────────────────────────────────────────────────
+const Nf  = n => {
+  const a = Math.abs(n);
+  const s = n < 0 ? '−' : '';
+  return s + (a>=1e6?(a/1e6).toFixed(1)+'М':a>=1e3?(a/1e3).toFixed(0)+'К':Math.round(a).toString());
+};
+const Nff = n => Math.round(n).toLocaleString('ru');
+const Rp  = n => n.toFixed(1)+'%';
+const R0  = n => Math.round(n).toString();
+
+// ── Render all ────────────────────────────────────────────────
+function getFilteredArticles() {
+  return ARTICLES.filter(a =>
+    (!F_CAB || a.cabinet === F_CAB) &&
+    (!F_MGR || a.manager === F_MGR) &&
+    (!F_CAT || a.category === F_CAT)
+  );
+}
+
+function renderAll() {
+  const filtered = getFilteredArticles();
+  if (!ARTICLES.length) {
+    document.getElementById('artList').innerHTML = '<div class="empty-msg">Нет артикулов</div>';
+    renderSummary([]);
+    return;
+  }
+  const calcs = filtered.map(a => ({art:a, pl:calcPL(a.id)}));
+  renderSummary(calcs);
+  document.getElementById('artList').innerHTML = calcs.length
+    ? calcs.map(({art, pl}) => renderCard(art, pl)).join('')
+    : '<div class="empty-msg">Нет артикулов по выбранным фильтрам</div>';
+  // update counter
+  const cnt = document.getElementById('filterCount');
+  if (cnt) cnt.textContent = filtered.length < ARTICLES.length
+    ? `Показано: ${filtered.length} из ${ARTICLES.length}`
+    : `${ARTICLES.length} артикулов`;
+}
+
+// ── Summary ───────────────────────────────────────────────────
+function renderSummary(calcs) {
+  const tOrd  = calcs.reduce((s,c)=>s+c.pl.ordQty,0);
+  const tBuy  = calcs.reduce((s,c)=>s+c.pl.buyQty,0);
+  const tRev  = calcs.reduce((s,c)=>s+c.pl.revenue,0);
+  const tMarg = calcs.reduce((s,c)=>s+c.pl.margT,0);
+  const tNet  = calcs.reduce((s,c)=>s+c.pl.netT,0);
+  const avgBuyPct = tOrd > 0 ? tBuy/tOrd*100 : 0;
+  const mPct = tRev > 0 ? tMarg/tRev*100 : 0;
+  const nPct = tRev > 0 ? tNet /tRev*100 : 0;
+  document.getElementById('sumStrip').innerHTML = `
+    <div class="sc"><div class="sl">Заказы</div><div class="sv">${Math.round(tOrd).toLocaleString('ru')}</div></div>
+    <div class="sc"><div class="sl">Выкуп %</div><div class="sv">${avgBuyPct.toFixed(1)}%</div></div>
+    <div class="sc"><div class="sl">Продажи</div><div class="sv">${Math.round(tBuy).toLocaleString('ru')}</div></div>
+    <div class="sc"><div class="sl">Выручка</div><div class="sv">${Nf(tRev)}₽</div></div>
+    <div class="sc"><div class="sl">Маржа</div><div class="sv ${tMarg>=0?'ok':'err'}">${Nf(tMarg)}₽ <span style="font-size:10px;font-weight:400">(${mPct.toFixed(1)}%)</span></div></div>
+    <div class="sc"><div class="sl">Чистая прибыль</div><div class="sv ${tNet>=0?'ok':'err'}">${Nf(tNet)}₽ <span style="font-size:10px;font-weight:400">(${nPct.toFixed(1)}%)</span></div></div>
+  `;
+}
+
+// ── Card render ───────────────────────────────────────────────
+function renderCard(art, pl) {
+  const hasData = PLANS[art.id] !== undefined;
+  const isExp   = EXPANDED.has(art.id);
+  const nCls    = pl.netPct > 0 ? 'ok' : pl.netPct < 0 ? 'err' : '';
+  const mCls    = pl.marginPct > 0 ? 'ok' : pl.marginPct < 0 ? 'err' : '';
+  return `<div class="art-card${hasData?' has-data':''}${isExp?' expanded':''}" id="card_${art.id}">
+    <div class="art-compact" onclick="toggleCard(${art.id})">
+      <div>
+        <div class="cn" title="${art.seller_article}">${art.seller_article}</div>
+        <div class="csub">${art.category||''}</div>
+      </div>
+      <div><div class="cv">${pl.ordQty||'—'}</div><div class="cvl">заказы</div></div>
+      <div><div class="cv">${pl.ordQty?pl.buyoutPct.toFixed(0)+'%':'—'}</div><div class="cvl">выкуп</div></div>
+      <div><div class="cv">${pl.buyQty||'—'}</div><div class="cvl">продажи</div></div>
+      <div><div class="cv">${pl.avgPrice?Nff(pl.avgPrice)+'₽':'—'}</div><div class="cvl">цена</div></div>
+      <div><div class="cv">${pl.revenue?Nf(pl.revenue)+'₽':'—'}</div><div class="cvl">выручка</div></div>
+      <div><div class="cv ${mCls}">${pl.revenue?Rp(pl.marginPct):'—'}</div><div class="cvl">маржа</div></div>
+      <div><div class="cv ${nCls}">${pl.revenue?Rp(pl.netPct):'—'}</div><div class="cvl">ЧП %</div></div>
+      <button class="exp-btn" onclick="event.stopPropagation();toggleCard(${art.id})">
+        ${isExp?'▲ свернуть':'▼ изменить'}
+      </button>
+    </div>
+    <div class="art-det" id="det_${art.id}" style="${isExp?'':'display:none'}">
+      ${isExp ? renderDetail(art, pl) : ''}
+    </div>
+  </div>`;
+}
+
+// ── Detail render ─────────────────────────────────────────────
+function renderDetail(art, pl) {
+  const p    = PLANS[art.id] || {};
+  const def  = getD();
+
+  // ── Volume inputs ──
+  const ordVal     = p._orders   !== undefined ? p._orders   : (p.plan_orders_qty   ?? '');
+  const buyPctVal  = p._buyout_pct !== undefined ? p._buyout_pct : (p.plan_buyout_pct !== null && p.plan_buyout_pct !== undefined ? p.plan_buyout_pct : (def.buyout_pct||''));
+  const buyVal     = p._buyouts  !== undefined ? p._buyouts  : (p.plan_buyouts_qty  ?? '');
+
+  // ── Price bands ──
+  const bands = pl.bands;
+  let bandsHtml;
+  if (bands.length === 0) {
+    const priceVal = p._price !== undefined ? p._price : (p.plan_price ?? '');
+    bandsHtml = `<div class="band-row">
+      <span class="band-sep" style="white-space:nowrap;color:var(--text2)">Цена продажи:</span>
+      <input class="band-inp" type="number" placeholder="₽/шт" value="${priceVal}" style="width:110px"
+             oninput="setProp(${art.id},'_price',this.value)">
+      <span class="band-sep">₽/шт</span>
+    </div>
+    <button class="add-band" onclick="addBand(${art.id})">+ несколько ценовых периодов</button>`;
+  } else {
+    bandsHtml = bands.map((b,i) => `<div class="band-row">
+      <input class="band-inp" type="number" placeholder="Продаж" value="${b.qty??''}" style="width:80px"
+             oninput="setBand(${art.id},${i},'qty',this.value)" title="Кол-во продаж в этом периоде">
+      <span class="band-sep">шт ×</span>
+      <input class="band-inp" type="number" placeholder="Цена" value="${b.price??''}" style="width:100px"
+             oninput="setBand(${art.id},${i},'price',this.value)">
+      <span class="band-sep">₽/шт</span>
+      <button class="band-del" onclick="delBand(${art.id},${i})">✕</button>
+    </div>`).join('');
+    const totalBQ = bands.reduce((s,b)=>s+(b.qty||0),0);
+    bandsHtml += `<button class="add-band" onclick="addBand(${art.id})">+ добавить период</button>
+      <div class="band-note">Продаж: ${totalBQ} шт · Ср. цена: ${pl.avgPrice?Nff(pl.avgPrice)+'₽':'—'}</div>`;
+  }
+
+  // ── % override input helper ──
+  function pctInp(editKey, dbKey, isDef, val, artId, label) {
+    const dispVal = isDef ? '' : val.toFixed(1);
+    const placeholder = isDef ? (val.toFixed(1)+' (дефолт)') : '';
+    return `<input type="number" class="pct-inp${isDef?' is-def':''}" step="0.1" min="0" max="100"
+      value="${dispVal}" placeholder="${placeholder}"
+      title="${isDef?'Используется ставка по умолчанию. Введите значение для переопределения.':'Переопределено для артикула'}"
+      oninput="setPct(${artId},'${editKey}',this)">`;
+  }
+
+  // ── P&L table ──
+  const plRows = [
+    ['Комиссия МП',   pctInp('_comm_pct','plan_commission_pct',pl.isCpDef,pl.cp,art.id), pl.cu, pl.cT],
+    ['Эквайринг',     pctInp('_acq_pct', 'plan_acquiring_pct', pl.isApDef,pl.ap,art.id), pl.au, pl.aT],
+    ['Логистика',     pctInp('_log_pct', 'plan_logistics_pct', pl.isLpDef,pl.lp,art.id), pl.lu, pl.lT],
+    ['Хранение',      pctInp('_sto_pct', 'plan_storage_pct',   pl.isSpDef,pl.sp,art.id), pl.su, pl.sT],
+    ['Реклама (ДРР)', `<input type="number" class="pct-inp" step="0.1" min="0" max="100"
+      value="${p._adv_pct!==undefined?p._adv_pct:(p.plan_drr??'')}"
+      oninput="setProp(${art.id},'_adv_pct',this.value)">`,                              pl.ru, pl.rT],
+  ];
+
+  let tbl = `<table class="pl-tbl"><thead><tr>
+    <th>Статья расходов</th><th style="width:80px">%</th>
+    <th style="width:90px">₽/шт (прод.)</th><th style="width:100px">₽ итого</th>
+  </tr></thead><tbody>`;
+
+  // Revenue header
+  tbl += `<tr class="hdr-row">
+    <td>Выручка <span style="font-size:9px;color:var(--text3)">(продажи × цена)</span></td>
+    <td></td>
+    <td style="font-weight:600">${pl.avgPrice?Nff(pl.avgPrice)+'₽':''}</td>
+    <td style="font-weight:700">${pl.revenue?Nf(pl.revenue)+'₽':''}</td>
+  </tr>`;
+
+  // Cost rows
+  for (const [lbl, pctEl, uv, tv] of plRows) {
+    tbl += `<tr class="indent">
+      <td>${lbl}</td>
+      <td>${pctEl}</td>
+      <td class="neg">${uv?'−'+Nff(uv)+'₽':''}</td>
+      <td class="neg">${tv?'−'+Nf(tv)+'₽':''}</td>
+    </tr>`;
+  }
+
+  // Gross (до себестоимости)
+  const gCls = pl.grossU >= 0 ? 'pos' : 'neg';
+  tbl += `<tr class="subtotal-row">
+    <td>= Валовая прибыль (до себест.)</td>
+    <td class="${gCls}">${pl.avgPrice?pl.grossU/pl.avgPrice*100>0?'+':'' : ''}${pl.avgPrice?Rp(pl.grossU/pl.avgPrice*100):''}</td>
+    <td class="${gCls}">${pl.avgPrice?Nff(pl.grossU)+'₽':''}</td>
+    <td class="${gCls}">${pl.revenue?Nf(pl.grossT)+'₽':''}</td>
+  </tr>`;
+
+  // Variable cost
+  const vcVal2 = p._var_cost !== undefined ? p._var_cost : (p.plan_variable_cost ?? '');
+  tbl += `<tr class="indent">
+    <td>Перем. себест.</td><td></td>
+    <td><input type="number" class="cost-inp" placeholder="₽/шт" value="${vcVal2}"
+          oninput="setProp(${art.id},'_var_cost',this.value)"></td>
+    <td class="neg">${pl.vcT?'−'+Nf(pl.vcT)+'₽':''}</td>
+  </tr>`;
+
+  // Margin
+  const mCls2 = pl.marginU >= 0 ? 'pos' : 'neg';
+  const mPctStr = pl.avgPrice ? Rp(pl.marginPct) : '';
+  tbl += `<tr class="subtotal-row">
+    <td>= Маржинальная прибыль</td>
+    <td class="${mCls2}">${mPctStr}</td>
+    <td class="${mCls2}">${pl.avgPrice?Nff(pl.marginU)+'₽':''}</td>
+    <td class="${mCls2}">${pl.revenue?Nf(pl.margT)+'₽':''}</td>
+  </tr>`;
+
+  // Fixed cost
+  const fcVal2 = p._fix_cost !== undefined ? p._fix_cost : (p.plan_fixed_cost ?? '');
+  tbl += `<tr class="indent">
+    <td>Пост. себест.</td><td></td>
+    <td><input type="number" class="cost-inp" placeholder="₽/шт" value="${fcVal2}"
+          oninput="setProp(${art.id},'_fix_cost',this.value)"></td>
+    <td class="neg">${pl.fcT?'−'+Nf(pl.fcT)+'₽':''}</td>
+  </tr>`;
+
+  // Net profit
+  const nCls2 = pl.netU >= 0 ? 'profit' : 'loss';
+  const nPctStr = pl.avgPrice ? Rp(pl.netPct) : '';
+  tbl += `<tr class="total-row ${nCls2}">
+    <td>Чистая прибыль</td>
+    <td>${nPctStr}</td>
+    <td>${pl.avgPrice?Nff(pl.netU)+'₽':''}</td>
+    <td>${pl.revenue?Nf(pl.netT)+'₽':''}</td>
+  </tr>`;
+
+  tbl += '</tbody></table>';
+
+  return `
+    <div class="slbl">Объёмы: заказы и продажи</div>
+    <div class="vol-grid">
+      <div class="vol-card">
+        <label>📦 Заказы (шт)</label>
+        <input type="number" placeholder="0" min="0" value="${ordVal}"
+               oninput="setProp(${art.id},'_orders',this.value)">
+        <div class="calc-hint">Сколько заказов разместят покупатели</div>
+      </div>
+      <div class="vol-card">
+        <label>✅ Выкупаемость %</label>
+        <input type="number" placeholder="${def.buyout_pct||70}" min="0" max="100" step="0.1" value="${buyPctVal}"
+               oninput="setProp(${art.id},'_buyout_pct',this.value)">
+        <div class="calc-hint">Какой % заказов будет выкуплен</div>
+      </div>
+      <div class="vol-card">
+        <label>💰 Продажи (выкупы, шт)</label>
+        <input type="number" placeholder="${pl.buyQty||0}" min="0" value="${buyVal}"
+               oninput="setProp(${art.id},'_buyouts',this.value)"
+               title="Можно ввести вручную — тогда % выкупа рассчитается автоматически">
+        <div class="calc-hint">Авторасчёт: заказы × выкуп%. Можно задать вручную</div>
+      </div>
+    </div>
+
+    <div class="slbl">Цена продажи</div>
+    <div class="bands-wrap">${bandsHtml}</div>
+
+    <div class="slbl">Unit-экономика на единицу проданного товара</div>
+    ${tbl}
+
+    <div class="art-actions">
+      <button class="save-btn" onclick="saveArticle(${art.id})">💾 Сохранить</button>
+      <span class="art-flash" id="flash_${art.id}">✓ Сохранено</span>
+    </div>`;
+}
+
+// ── Interactive mutations ─────────────────────────────────────
+function toggleCard(artId) {
+  if (EXPANDED.has(artId)) {
+    EXPANDED.delete(artId);
+    const card = document.getElementById('card_'+artId);
+    if (card) {
+      card.classList.remove('expanded');
+      const det = document.getElementById('det_'+artId);
+      det.style.display = 'none'; det.innerHTML = '';
+      card.querySelector('.exp-btn').textContent = '▼ изменить';
+    }
+  } else {
+    EXPANDED.add(artId);
+    const art = ARTICLES.find(a => a.id === artId);
+    const pl  = calcPL(artId);
+    const card = document.getElementById('card_'+artId);
+    if (card) {
+      card.classList.add('expanded');
+      card.querySelector('.exp-btn').textContent = '▲ свернуть';
+      const det = document.getElementById('det_'+artId);
+      det.innerHTML = renderDetail(art, pl);
+      det.style.display = 'block';
+    }
+  }
+}
+
+function setProp(artId, key, val) {
+  if (!PLANS[artId]) PLANS[artId] = {};
+  PLANS[artId][key] = val;
+  recalcCard(artId);
+}
+function setPct(artId, editKey, inp) {
+  if (!PLANS[artId]) PLANS[artId] = {};
+  PLANS[artId][editKey] = inp.value;
+  inp.classList.toggle('is-def', inp.value.trim() === '');
+  recalcCard(artId);
+}
+function setBand(artId, i, prop, val) {
+  if (!PLANS[artId]) PLANS[artId] = {};
+  if (!PLANS[artId]._bands) PLANS[artId]._bands = [];
+  PLANS[artId]._bands[i] = PLANS[artId]._bands[i] || {};
+  PLANS[artId]._bands[i][prop] = parseFloat(val)||0;
+  recalcCard(artId);
+}
+function addBand(artId) {
+  if (!PLANS[artId]) PLANS[artId] = {};
+  const p = PLANS[artId];
+  if (!p._bands) {
+    const curPrice = parseFloat(p._price||p.plan_price||0);
+    const curSales = parseFloat(p._buyouts||p.plan_buyouts_qty||0);
+    p._bands = [{qty: curSales, price: curPrice}];
+  }
+  p._bands.push({qty:0, price:0});
+  refreshDetail(artId);
+}
+function delBand(artId, i) {
+  const p = PLANS[artId];
+  if (p && p._bands) {
+    p._bands.splice(i,1);
+    if (p._bands.length===0) delete p._bands;
+  }
+  refreshDetail(artId);
+}
+
+function recalcCard(artId) {
+  const art = ARTICLES.find(a=>a.id===artId);
+  if (!art) return;
+  const pl = calcPL(artId);
+  // Update compact numbers
+  const card = document.getElementById('card_'+artId);
+  if (!card) return;
+  const cells = card.querySelectorAll('.art-compact > div');
+  const nCls = pl.netPct>0?'ok':pl.netPct<0?'err':'';
+  const mCls = pl.marginPct>0?'ok':pl.marginPct<0?'err':'';
+  if (cells.length >= 8) {
+    cells[1].querySelector('.cv').textContent = pl.ordQty||'—';
+    cells[2].querySelector('.cv').textContent = pl.ordQty?pl.buyoutPct.toFixed(0)+'%':'—';
+    cells[3].querySelector('.cv').textContent = pl.buyQty||'—';
+    cells[4].querySelector('.cv').textContent = pl.avgPrice?Nff(pl.avgPrice)+'₽':'—';
+    cells[5].querySelector('.cv').textContent = pl.revenue?Nf(pl.revenue)+'₽':'—';
+    const mc = cells[6].querySelector('.cv');
+    mc.textContent = pl.revenue?Rp(pl.marginPct):'—';
+    mc.className='cv '+(pl.marginPct>0?'ok':pl.marginPct<0?'err':'');
+    const nc = cells[7].querySelector('.cv');
+    nc.textContent = pl.revenue?Rp(pl.netPct):'—';
+    nc.className='cv '+(pl.netPct>0?'ok':pl.netPct<0?'err':'');
+  }
+  // Refresh detail
+  if (EXPANDED.has(artId)) {
+    const det = document.getElementById('det_'+artId);
+    if (det) det.innerHTML = renderDetail(art, pl);
+  }
+  // Update summary
+  renderSummary(ARTICLES.map(a=>({art:a,pl:calcPL(a.id)})));
+}
+
+function refreshDetail(artId) {
+  if (!EXPANDED.has(artId)) return;
+  const art = ARTICLES.find(a=>a.id===artId);
+  const pl  = calcPL(artId);
+  const det = document.getElementById('det_'+artId);
+  if (det) det.innerHTML = renderDetail(art, pl);
+  renderSummary(ARTICLES.map(a=>({art:a,pl:calcPL(a.id)})));
+}
+
+// ── Save ──────────────────────────────────────────────────────
+function buildPayload(artId) {
+  const p  = PLANS[artId] || {};
+  const pl = calcPL(artId);
+  const bands = pl.bands;
+
+  function getOverride(editKey, dbKey) {
+    const v = p[editKey];
+    if (v !== undefined && v !== '') return parseFloat(v);
+    return (p[dbKey] !== null && p[dbKey] !== undefined) ? parseFloat(p[dbKey]) : null;
+  }
+
+  return {
+    article_id:          artId,
+    year:                CYEAR,
+    month:               CMONTH,
+    plan_orders_qty:     pl.ordQty   || null,
+    plan_buyouts_qty:    pl.buyQty   || null,
+    plan_buyout_pct:     pl.buyoutPct>0 ? parseFloat(pl.buyoutPct.toFixed(2)) : null,
+    plan_revenue:        pl.revenue  || null,
+    plan_price:          pl.avgPrice || null,
+    plan_price_bands:    bands.length ? JSON.stringify(bands) : null,
+    plan_drr:            pl.rp       || null,
+    plan_spend:          pl.rT       || null,
+    plan_commission_pct: getOverride('_comm_pct','plan_commission_pct'),
+    plan_acquiring_pct:  getOverride('_acq_pct', 'plan_acquiring_pct'),
+    plan_logistics_pct:  getOverride('_log_pct', 'plan_logistics_pct'),
+    plan_storage_pct:    getOverride('_sto_pct', 'plan_storage_pct'),
+    plan_variable_cost:  parseFloat(p._var_cost ?? p.plan_variable_cost ?? '') || null,
+    plan_fixed_cost:     parseFloat(p._fix_cost ?? p.plan_fixed_cost    ?? '') || null,
+    updated_at:          new Date().toISOString(),
+  };
+}
+
+async function saveArticle(artId) {
+  const btn = document.querySelector(`#det_${artId} .save-btn`);
+  if (btn) { btn.disabled=true; btn.textContent='Сохранение...'; }
+  try {
+    const payload = buildPayload(artId);
+    const res = await sbUpsert('monthly_plans', payload, 'article_id,year,month');
+    if (res && res[0]) {
+      const edits = Object.fromEntries(
+        Object.entries(PLANS[artId]||{}).filter(([k])=>k.startsWith('_'))
+      );
+      PLANS[artId] = {...res[0], ...edits};
+    }
+    const fl = document.getElementById('flash_'+artId);
+    if (fl) { fl.classList.add('show'); setTimeout(()=>fl.classList.remove('show'),2200); }
+    const card = document.getElementById('card_'+artId);
+    if (card && !card.classList.contains('has-data')) {
+      card.classList.add('has-data');
+      card.querySelector('.art-compact').classList.add('has-data');
+    }
+  } catch(e) {
+    showToast('Ошибка: ' + e.message, true);
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent='💾 Сохранить'; }
+  }
+}
+
+async function saveAll() {
+  const toSave = ARTICLES.filter(a => PLANS[a.id] !== undefined);
+  if (!toSave.length) { showToast('Нет данных для сохранения'); return; }
+  let ok=0, err=0;
+  for (const art of toSave) {
+    try { await sbUpsert('monthly_plans', buildPayload(art.id), 'article_id,year,month'); ok++; }
+    catch(e) { err++; }
+  }
+  showToast(err ? `Сохранено: ${ok}, ошибок: ${err}` : `✓ Сохранено ${ok} артикулов`);
+  await loadData();
+}
+
+// ── Filters ───────────────────────────────────────────────────
+function buildFilterOptions() {
+  const cabs = [...new Set(ARTICLES.map(a=>a.cabinet).filter(Boolean))].sort();
+  const mgrs = [...new Set(ARTICLES.map(a=>a.manager).filter(Boolean))].sort();
+  const cats = [...new Set(ARTICLES.map(a=>a.category).filter(Boolean))].sort();
+
+  function refill(id, items, placeholder) {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    items.forEach(v => {
+      const o = document.createElement('option');
+      o.value = o.textContent = v;
+      if (v === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+    // Hide selector if no values
+    sel.parentElement && (sel.style.display = items.length ? '' : 'none');
+  }
+
+  refill('fCab', cabs, 'Все кабинеты');
+  refill('fMgr', mgrs, 'Все менеджеры');
+  refill('fCat', cats, 'Все категории');
+}
+
+function applyFilters() {
+  F_CAB = document.getElementById('fCab').value;
+  F_MGR = document.getElementById('fMgr').value;
+  F_CAT = document.getElementById('fCat').value;
+  const hasFilter = F_CAB || F_MGR || F_CAT;
+  const btn = document.getElementById('filterResetBtn');
+  if (btn) btn.style.display = hasFilter ? '' : 'none';
+  renderAll();
+}
+
+function resetFilters() {
+  F_CAB = F_MGR = F_CAT = '';
+  document.getElementById('fCab').value = '';
+  document.getElementById('fMgr').value = '';
+  document.getElementById('fCat').value = '';
+  document.getElementById('filterResetBtn').style.display = 'none';
+  renderAll();
+}
+
+// ── Excel template download (.xlsx) ──────────────────────────
+const TMPL_COLS = [
+  {h:'Кабинет',              key:'cabinet',            num:false},
+  {h:'Менеджер',             key:'manager',            num:false},
+  {h:'Категория',            key:'category',           num:false},
+  {h:'Артикул',              key:'seller_article',     num:false},
+  {h:'Заказы (шт)',          plan:'plan_orders_qty',   num:true},
+  {h:'Выкуп %',              plan:'plan_buyout_pct',   num:true},
+  {h:'Продажи (шт)',         plan:'plan_buyouts_qty',  num:true},
+  {h:'Цена (₽)',             plan:'plan_price',        num:true},
+  {h:'Выручка (₽)',          plan:'plan_revenue',      num:true},
+  {h:'Себест.перем (₽/шт)', plan:'plan_variable_cost',num:true},
+  {h:'Себест.пост (₽/шт)',  plan:'plan_fixed_cost',   num:true},
+  {h:'Комиссия %',           plan:'plan_commission_pct',num:true},
+  {h:'Логистика %',          plan:'plan_logistics_pct',num:true},
+  {h:'Хранение %',           plan:'plan_storage_pct', num:true},
+  {h:'ДРР %',                plan:'plan_drr',          num:true},
+];
+
+function downloadTemplate() {
+  // Build data array
+  const headers = TMPL_COLS.map(c => c.h);
+  const dataRows = ARTICLES.map(a => {
+    return TMPL_COLS.map(c => {
+      if (c.key)  return a[c.key] || '';           // article field
+      if (c.plan) {
+        const v = PLANS[a.id]?.[c.plan];
+        return (v !== null && v !== undefined) ? (c.num ? Number(v) : v) : '';
+      }
+      return '';
+    });
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+
+  // Column widths
+  ws['!cols'] = TMPL_COLS.map((c,i) => ({wch: i < 4 ? 22 : 14}));
+
+  // Style header row (bold, light fill) — SheetJS CE doesn't apply styles but sets the ref
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  // Lock first 4 columns as "info" by adding a note to header
+  const numStartCol = 4; // index of first numeric column
+  for (let C = numStartCol; C <= range.e.c; C++) {
+    const cell = ws[XLSX.utils.encode_cell({r:0, c:C})];
+    if (cell) cell.c = [{a:'', t:'Заполните или оставьте пустым'}];
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'План');
+
+  // Add instructions sheet
+  const instrData = [
+    ['ИНСТРУКЦИЯ'],
+    [''],
+    ['1. Заполните числовые колонки (Заказы, Выкуп %, Продажи, Цена и т.д.)'],
+    ['2. Колонки Кабинет, Менеджер, Категория, Артикул — НЕ изменять'],
+    ['3. Пустая ячейка = значение не меняется в базе'],
+    ['4. Сохраните файл и загрузите через кнопку «Загрузить»'],
+    [''],
+    ['Колонки:'],
+    ['Заказы (шт)',       'Плановое кол-во заказов за месяц'],
+    ['Выкуп %',           'Ожидаемый % выкупа (0–100)'],
+    ['Продажи (шт)',      'Плановое кол-во продаж (авторасчёт: Заказы × Выкуп%)'],
+    ['Цена (₽)',          'Средняя цена продажи'],
+    ['Выручка (₽)',       'Авторасчёт: Продажи × Цена'],
+    ['Себест.перем',      'Переменная себестоимость ₽/шт (закупка, упаковка)'],
+    ['Себест.пост',       'Постоянные расходы ₽/шт (амортизация и т.д.)'],
+    ['Комиссия %',        'Комиссия маркетплейса (переопределяет дефолт)'],
+    ['Логистика %',       'Логистика % от выручки (переопределяет дефолт)'],
+    ['Хранение %',        'Хранение % от выручки'],
+    ['ДРР %',             'Доля рекламных расходов от выручки'],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(instrData);
+  ws2['!cols'] = [{wch:28},{wch:52}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Инструкция');
+
+  const mp = CMP.toUpperCase();
+  const mo = MONTHS_RU[CMONTH];
+  XLSX.writeFile(wb, `план_${mp}_${mo}_${CYEAR}.xlsx`);
+}
+
+// ── CSV upload ────────────────────────────────────────────────
+function openUploadModal() {
+  document.getElementById('uploadModal').classList.add('open');
+  document.getElementById('uploadResult').textContent = '';
+  document.getElementById('uploadResult').className = '';
+  document.getElementById('uploadConfirmBtn').disabled = true;
+  document.getElementById('csvFileIn').value = '';
+  document.getElementById('uploadDropLabel').textContent = 'Нажмите или перетащите .xlsx или .csv файл';
+  CSV_PENDING = null;
+}
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.remove('open');
+  CSV_PENDING = null;
+}
+
+// drag-over styling
+document.addEventListener('DOMContentLoaded', () => {
+  const drop = document.getElementById('uploadDrop');
+  if (!drop) return;
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) handleCSVFile(f);
+  });
+});
+
+function handleCSVFile(file) {
+  if (!file) return;
+  document.getElementById('uploadDropLabel').textContent = '📄 ' + file.name;
+  const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
+  const reader = new FileReader();
+  if (isXlsx) {
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        // Use first sheet named 'План', or first sheet
+        const sheetName = wb.SheetNames.includes('План') ? 'План' : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        parseAOA(aoa);
+      } catch(err) {
+        showUploadResult('Ошибка чтения .xlsx: ' + err.message, true);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = e => parseCSVText(e.target.result);
+    reader.readAsText(file, 'utf-8');
+  }
+}
+
+function parseCSVText(text) {
+  // Strip BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if (lines.length < 2) {
+    showUploadResult('Файл пуст или содержит только заголовок.', true); return;
+  }
+
+  // Parse quoted CSV
+  function parseLine(line) {
+    const res=[]; let cur='', inQ=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='"'){ if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ; }
+      else if(c===','&&!inQ){ res.push(cur.trim()); cur=''; }
+      else cur+=c;
+    }
+    res.push(cur.trim()); return res;
+  }
+
+  const aoa = lines.map(parseLine);
+  parseAOA(aoa);
+}
+
+function parseAOA(aoa) {
+  if (aoa.length < 2) {
+    showUploadResult('Файл пуст или содержит только заголовок.', true); return;
+  }
+  const headers = aoa[0].map(h => String(h).trim());
+
+  // Map column names to indices
+  const idx = {};
+  const HMAP = {
+    'Артикул':0,'артикул':0,
+    'Заказы (шт)':0,'заказы':0,
+    'Выкуп %':0,'выкуп %':0,'выкуп%':0,
+    'Продажи (шт)':0,'продажи (шт)':0,
+    'Цена (₽)':0,'цена':0,
+    'Выручка (₽)':0,
+    'Себест.перем (₽/шт)':0,'себест.перем':0,
+    'Себест.пост (₽/шт)':0,'себест.пост':0,
+    'Комиссия %':0,'комиссия %':0,'комиссия%':0,
+    'Логистика %':0,'логистика %':0,'логистика%':0,
+    'Хранение %':0,'хранение %':0,'хранение%':0,
+    'ДРР %':0,'дрр %':0,'дрр%':0,
+    'Кабинет':0,'Менеджер':0,
+  };
+
+  headers.forEach((h,i) => { idx[h.toLowerCase()] = i; idx[h] = i; });
+
+  function col(h) { return idx[h] ?? idx[h.toLowerCase()] ?? -1; }
+
+  const artCol = col('Артикул');
+  if (artCol < 0) {
+    showUploadResult('Не найдена колонка "Артикул". Используйте шаблон.', true); return;
+  }
+
+  // Build article lookup: seller_article → article object
+  const artLookup = {};
+  for (const a of ARTICLES) artLookup[a.seller_article.trim()] = a;
+
+  const parsed=[]; const errors=[]; const warnings=[];
+
+  for (let i=1; i<aoa.length; i++) {
+    const row = aoa[i].map(v => (v === null || v === undefined) ? '' : String(v));
+    const artKey = (row[artCol]||'').trim();
+    if (!artKey) continue;
+
+    const art = artLookup[artKey];
+    if (!art) { errors.push(`Строка ${i+1}: артикул "${artKey}" не найден в базе`); continue; }
+
+    function num(h) {
+      const c = col(h); if(c<0) return null;
+      const raw = row[c] ?? '';
+      const v = String(raw).replace(',','.').trim();
+      return v===''?null:(parseFloat(v)||null);
+    }
+    function str(h) {
+      const c = col(h); if(c<0) return null;
+      return String(row[c]||'').trim()||null;
+    }
+
+    const rec = {
+      _artId: art.id,
+      _artKey: artKey,
+      plan_orders_qty:     num('Заказы (шт)'),
+      plan_buyout_pct:     num('Выкуп %'),
+      plan_buyouts_qty:    num('Продажи (шт)'),
+      plan_price:          num('Цена (₽)'),
+      plan_revenue:        num('Выручка (₽)'),
+      plan_variable_cost:  num('Себест.перем (₽/шт)'),
+      plan_fixed_cost:     num('Себест.пост (₽/шт)'),
+      plan_commission_pct: num('Комиссия %'),
+      plan_logistics_pct:  num('Логистика %'),
+      plan_storage_pct:    num('Хранение %'),
+      plan_drr:            num('ДРР %'),
+      _cabinet:            str('Кабинет'),
+      _manager:            str('Менеджер'),
+    };
+
+    // Warn if row has no plan data
+    const hasPlan = Object.entries(rec).some(([k,v])=>!k.startsWith('_')&&v!==null);
+    if (!hasPlan) warnings.push(`Строка ${i+1} (${artKey}): нет числовых данных — пропущена`);
+    else parsed.push(rec);
+  }
+
+  if (!parsed.length && !errors.length) {
+    showUploadResult('Файл не содержит данных для загрузки.', true); return;
+  }
+
+  CSV_PENDING = parsed;
+
+  let msg = `✓ Разобрано: ${parsed.length} артикулов`;
+  if (warnings.length) msg += `\n⚠ Пропущено (нет данных): ${warnings.length}`;
+  if (errors.length)   msg += `\n✗ Не найдено в базе: ${errors.length}\n  ${errors.slice(0,5).join('\n  ')}${errors.length>5?'\n  ...':''}`;
+  msg += `\n\nНажмите «Загрузить в БД» для подтверждения.`;
+
+  showUploadResult(msg, errors.length > 0 && !parsed.length);
+  document.getElementById('uploadConfirmBtn').disabled = !parsed.length;
+}
+
+function showUploadResult(msg, isErr) {
+  const el = document.getElementById('uploadResult');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : (CSV_PENDING && CSV_PENDING.length ? 'ok' : '');
+}
+
+async function confirmUpload() {
+  if (!CSV_PENDING || !CSV_PENDING.length) return;
+  const btn = document.getElementById('uploadConfirmBtn');
+  btn.disabled = true; btn.textContent = 'Загрузка...';
+
+  let ok=0, err=0, errMsgs=[];
+  const artUpdates = []; // collect cabinet/manager patches
+
+  for (const rec of CSV_PENDING) {
+    const payload = {
+      article_id: rec._artId,
+      year: CYEAR, month: CMONTH,
+      updated_at: new Date().toISOString(),
+    };
+    // Only include non-null fields so we don't overwrite existing data with null
+    const planFields = [
+      'plan_orders_qty','plan_buyout_pct','plan_buyouts_qty','plan_price',
+      'plan_revenue','plan_variable_cost','plan_fixed_cost',
+      'plan_commission_pct','plan_logistics_pct','plan_storage_pct','plan_drr',
+    ];
+    for (const f of planFields) {
+      if (rec[f] !== null) payload[f] = rec[f];
+    }
+    // Derive plan_spend if drr and revenue both present
+    if (rec.plan_drr !== null && rec.plan_revenue !== null)
+      payload.plan_spend = rec.plan_revenue * rec.plan_drr / 100;
+
+    try {
+      await sbUpsert('monthly_plans', payload, 'article_id,year,month');
+      ok++;
+    } catch(e) { err++; errMsgs.push(`${rec._artKey}: ${e.message}`); }
+
+    // Patch article cabinet/manager if provided
+    if (rec._cabinet !== null || rec._manager !== null) {
+      artUpdates.push({id: rec._artId, cabinet: rec._cabinet, manager: rec._manager});
+    }
+  }
+
+  // Update article cabinet/manager fields (PATCH)
+  for (const u of artUpdates) {
+    const body = {};
+    if (u.cabinet !== null) body.cabinet = u.cabinet;
+    if (u.manager !== null) body.manager = u.manager;
+    if (!Object.keys(body).length) continue;
+    try {
+      await fetch(`${SB_URL}/rest/v1/articles?id=eq.${u.id}`, {
+        method: 'PATCH',
+        headers: {apikey:SB_ANON, Authorization:`Bearer ${authToken()}`,
+                  'Content-Type':'application/json', Prefer:'return=minimal'},
+        body: JSON.stringify(body)
+      });
+    } catch(_) {}
+  }
+
+  const el = document.getElementById('uploadResult');
+  if (err) {
+    el.textContent = `✓ Загружено: ${ok}\n✗ Ошибок: ${err}\n${errMsgs.slice(0,3).join('\n')}`;
+    el.className = 'err';
+  } else {
+    el.textContent = `✓ Успешно загружено ${ok} артикулов!`;
+    el.className = 'ok';
+  }
+
+  btn.textContent = 'Готово';
+  CSV_PENDING = null;
+
+  // Reload data to reflect changes
+  setTimeout(async () => { closeUploadModal(); await loadData(); }, 1800);
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+let _tt;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#18181b';
+  t.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(()=>t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
+       
