@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Себестоимость — ABELLO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#f4f4f5;--card:#fff;--border:#e4e4e7;--border2:#f0f0f2;
+  --text:#18181b;--text2:#52525b;--text3:#a1a1aa;
+  --accent:#2563eb;--accent-h:#1d4ed8;
+  --ok:#16a34a;--ok-bg:rgba(22,163,74,.08);
+  --err:#dc2626;--err-bg:rgba(220,38,38,.08);
+  --warn:#d97706;--warn-bg:rgba(217,119,6,.08);
+  --info:#0891b2;--info-bg:rgba(8,145,178,.08);
+  --r:8px;--r2:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+
+/* ── Login ── */
+#loginOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;z-index:999}
+#loginBox{background:var(--card);border-radius:12px;padding:36px 44px;width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px}
+#loginBox h2{font-size:17px;font-weight:600;text-align:center}
+#loginBox p{font-size:11px;color:var(--text3);text-align:center;margin-top:-6px}
+#loginBox input{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:var(--r);font-size:14px;outline:none;transition:border-color .15s}
+#loginBox input:focus{border-color:var(--accent)}
+#loginBox button{width:100%;padding:10px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer}
+#loginBox button:hover{background:var(--accent-h)}
+#loginErr{color:var(--err);font-size:11px;text-align:center;min-height:14px}
+
+/* ── App ── */
+#app{display:none;max-width:1300px;margin:0 auto;padding:20px 16px}
+
+/* ── Header ── */
+.pg-hdr{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.pg-hdr h1{font-size:17px;font-weight:600}
+.pg-hdr-links{display:flex;gap:6px}
+.pg-hdr a{font-size:11px;color:var(--text3);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);transition:all .15s}
+.pg-hdr a:hover{color:var(--text);border-color:var(--text2)}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.mp-tabs{display:flex;gap:4px}
+.mpt{padding:5px 14px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--card);font-size:12px;cursor:pointer;color:var(--text2);
+  font-family:var(--font);transition:all .15s}
+.mpt.wb{background:#CB11AB;border-color:#CB11AB;color:#fff}
+.mpt.oz{background:#005bff;border-color:#005bff;color:#fff}
+.search-inp{padding:6px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:12px;outline:none;width:200px;font-family:var(--font)}
+.search-inp:focus{border-color:var(--accent)}
+select.flt{padding:6px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  font-size:12px;outline:none;background:var(--card);font-family:var(--font);cursor:pointer}
+select.flt:focus{border-color:var(--accent)}
+.ctrl-sep{flex:1}
+.csv-btn{padding:6px 12px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);font-size:12px;cursor:pointer;color:var(--text2);
+  font-family:var(--font);transition:all .15s;white-space:nowrap}
+.csv-btn:hover{border-color:var(--accent);color:var(--accent)}
+.csv-btn.upload{background:var(--accent);color:#fff;border-color:var(--accent)}
+.csv-btn.upload:hover{background:var(--accent-h)}
+.add-btn{padding:6px 14px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.add-btn:hover{background:var(--accent-h)}
+
+/* ── Add / Edit form ── */
+.add-form-wrap{background:var(--card);border:1px solid #bfdbfe;border-radius:var(--r);
+  padding:16px;margin-bottom:12px;display:none}
+.add-form-wrap.open{display:block}
+.add-form-title{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px}
+.add-form-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.af{display:flex;flex-direction:column;gap:4px}
+.af label{font-size:10px;color:var(--text3);font-weight:500}
+.af input,.af select,.af textarea{padding:7px 9px;border:1px solid var(--border);
+  border-radius:var(--r2);font-size:12px;outline:none;font-family:var(--font)}
+.af input:focus,.af select:focus{border-color:var(--accent)}
+.af-art{min-width:220px}
+.af-num{width:120px;text-align:right}
+.af-date{width:130px}
+.af-note{min-width:200px}
+.af-actions{display:flex;gap:8px;align-items:center;padding-top:2px}
+.af-save{padding:7px 20px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.af-save:hover{background:var(--accent-h)}
+.af-cancel{padding:7px 12px;background:transparent;color:var(--text3);border:1px solid var(--border);
+  border-radius:var(--r2);font-size:12px;cursor:pointer;font-family:var(--font)}
+.af-cancel:hover{color:var(--text);border-color:var(--text2)}
+.af-err{font-size:11px;color:var(--err);min-height:14px;align-self:center}
+
+/* ── Summary strip ── */
+.sum-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px}
+.sl{font-size:9px;color:var(--text3);font-weight:500;margin-bottom:2px;text-transform:uppercase}
+.sv{font-size:14px;font-weight:600;color:var(--text);line-height:1.2}
+.sv.ok{color:var(--ok)}.sv.warn{color:var(--warn)}.sv.err{color:var(--err)}
+@media(max-width:800px){.sum-strip{grid-template-columns:repeat(3,1fr)}}
+
+/* ── Table ── */
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:10px;font-weight:500;color:var(--text3);padding:8px 10px;
+  border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;
+  background:var(--bg);position:sticky;top:0;z-index:1}
+th.r{text-align:right}
+td{padding:7px 10px;border-bottom:1px solid var(--border2);vertical-align:middle}
+td.r{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.art-cell{display:flex;align-items:center;gap:8px}
+.art-img{width:32px;height:32px;border-radius:4px;object-fit:cover;
+  border:1px solid var(--border);flex-shrink:0;background:var(--border2)}
+.art-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3}
+.art-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.wb-id{font-size:10px;color:var(--text3);font-family:monospace}
+.cost-total{font-weight:600;color:var(--text)}
+.period-cell{white-space:nowrap}
+.period-from{font-size:11px;color:var(--text)}
+.period-to{font-size:10px;color:var(--text3)}
+
+/* ── Status badges ── */
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;
+  padding:2px 8px;border-radius:10px;font-weight:500;white-space:nowrap}
+.badge.active{background:var(--ok-bg);color:var(--ok)}
+.badge.future{background:var(--info-bg);color:var(--info)}
+.badge.expired{background:var(--border2);color:var(--text3)}
+
+/* ── Row actions ── */
+.row-actions{display:flex;gap:4px;justify-content:flex-end}
+.ra{padding:3px 8px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);font-size:10px;cursor:pointer;color:var(--text3);
+  font-family:var(--font);transition:all .15s}
+.ra:hover{border-color:var(--accent);color:var(--accent)}
+.ra.del:hover{border-color:var(--err);color:var(--err)}
+
+/* ── Empty/loading ── */
+.empty-msg{text-align:center;padding:48px;color:var(--text3);font-size:13px}
+
+/* ── Conflict banner ── */
+#conflictBanner{display:none;background:#fffbeb;border:1.5px solid #f59e0b;
+  border-radius:var(--r);padding:12px 16px;margin-bottom:12px;
+  animation:slideIn .2s ease}
+#conflictBanner.show{display:flex;align-items:flex-start;gap:12px}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.cb-icon{font-size:18px;flex-shrink:0;line-height:1.2}
+.cb-body{flex:1}
+.cb-title{font-size:12px;font-weight:600;color:#92400e;margin-bottom:4px}
+.cb-list{font-size:11px;color:#78350f;line-height:1.6}
+.cb-list b{font-weight:600}
+.cb-list .cb-art{display:inline-block;background:#fef3c7;border:1px solid #fcd34d;
+  border-radius:4px;padding:1px 6px;margin:1px 3px 1px 0;font-family:monospace;font-size:10px}
+.cb-hint{font-size:10px;color:#a16207;margin-top:6px}
+.cb-close{flex-shrink:0;background:none;border:none;font-size:16px;cursor:pointer;
+  color:#a16207;padding:0 2px;line-height:1;opacity:.7}
+.cb-close:hover{opacity:1}
+
+/* ── Conflict row highlight ── */
+tr.conflict-row td{background:#fffbeb !important}
+tr.conflict-row td:first-child{border-left:3px solid #f59e0b}
+.badge.conflict{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+
+/* ── Upload modal ── */
+#uploadModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+  z-index:200;align-items:center;justify-content:center}
+#uploadModal.open{display:flex}
+.um-box{background:var(--card);border-radius:12px;padding:28px 32px;width:560px;max-width:95vw;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:16px}
+.um-title{font-size:15px;font-weight:600}
+.um-drop{border:2px dashed var(--border);border-radius:var(--r);padding:32px;
+  text-align:center;color:var(--text3);cursor:pointer;transition:all .15s}
+.um-drop:hover,.um-drop.drag{border-color:var(--accent);color:var(--accent);background:#eff6ff}
+.um-drop input{display:none}
+.um-preview{background:var(--bg);border-radius:var(--r2);padding:12px;font-size:12px;
+  max-height:220px;overflow-y:auto;display:none}
+.um-preview.show{display:block}
+.um-preview table{width:100%;border-collapse:collapse}
+.um-preview th{font-size:10px;color:var(--text3);padding:3px 6px;text-align:left;border-bottom:1px solid var(--border)}
+.um-preview td{padding:3px 6px;font-size:11px;border-bottom:1px solid var(--border2)}
+.um-preview .err-row td{color:var(--err);background:var(--err-bg)}
+.um-actions{display:flex;gap:8px;align-items:center}
+.um-status{font-size:11px;color:var(--text3);flex:1}
+.um-commit{padding:8px 20px;background:var(--ok);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.um-commit:disabled{opacity:.4;cursor:not-allowed}
+.um-close{padding:8px 14px;border:1px solid var(--border);background:transparent;
+  border-radius:var(--r2);font-size:12px;cursor:pointer;font-family:var(--font)}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>ABELLO · Себестоимость</h2>
+    <p>Войдите чтобы продолжить</p>
+    <input type="email" id="emailInp" placeholder="Email" autocomplete="email">
+    <input type="password" id="pwdInp" placeholder="Пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Войти</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="pg-hdr">
+    <h1>💰 Себестоимость</h1>
+    <div class="pg-hdr-links">
+      <a href="rnp_v6_live.html">← Дашборд</a>
+      <a href="plan_editor.html">Планы</a>
+      <a href="supply_batches.html">Партии</a>
+      <a href="article_settings.html">Артикулы</a>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="ctrl-row">
+    <div class="mp-tabs">
+      <button class="mpt wb" onclick="setMp('wb',this)">WB</button>
+      <button class="mpt" onclick="setMp('ozon',this)">OZON</button>
+    </div>
+    <input class="search-inp" id="searchInp" placeholder="🔍 Поиск по артикулу…" oninput="renderTable()">
+    <select class="flt" id="fCat" onchange="renderTable()"><option value="">Все категории</option></select>
+    <select class="flt" id="fStatus" onchange="renderTable()">
+      <option value="">Все статусы</option>
+      <option value="active">Активные</option>
+      <option value="future">Будущие</option>
+      <option value="expired">Истёкшие</option>
+    </select>
+    <div class="ctrl-sep"></div>
+    <button class="csv-btn" onclick="downloadTemplate()">⬇ Шаблон xlsx</button>
+    <button class="csv-btn upload" onclick="openUploadModal()">⬆ Загрузить</button>
+    <button class="add-btn" onclick="openAddForm()">+ Добавить</button>
+  </div>
+
+  <!-- Summary strip -->
+  <div class="sum-strip">
+    <div class="sc"><div class="sl">Всего записей</div><div class="sv" id="sumTotal">—</div></div>
+    <div class="sc"><div class="sl">Активных</div><div class="sv ok" id="sumActive">—</div></div>
+    <div class="sc"><div class="sl">Будущих</div><div class="sv" style="color:var(--info)" id="sumFuture">—</div></div>
+    <div class="sc"><div class="sl">Ср. перем. с/с</div><div class="sv" id="sumVarAvg">—</div></div>
+    <div class="sc"><div class="sl">Ср. полная с/с</div><div class="sv" id="sumTotalAvg">—</div></div>
+  </div>
+
+  <!-- Add/Edit form -->
+  <div class="add-form-wrap" id="addForm">
+    <div class="add-form-title" id="addFormTitle">Новая запись себестоимости</div>
+    <div class="add-form-grid">
+      <div class="af af-art">
+        <label>Артикул продавца *</label>
+        <select id="afArticle" style="min-width:220px"><option value="">— выберите —</option></select>
+      </div>
+      <div class="af af-num">
+        <label>Переменная с/с ₽/шт *</label>
+        <input type="number" id="afVar" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="af af-num">
+        <label>Постоянная с/с ₽/шт</label>
+        <input type="number" id="afFixed" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="af af-date">
+        <label>Период с *</label>
+        <input type="date" id="afFrom">
+      </div>
+      <div class="af af-date">
+        <label>По (пусто = бессрочно)</label>
+        <input type="date" id="afTo">
+      </div>
+      <div class="af af-note">
+        <label>Комментарий</label>
+        <input type="text" id="afNote" placeholder="Сезонный пересмотр, новый поставщик…">
+      </div>
+      <div class="af-actions">
+        <button class="af-save" onclick="saveRecord()">Сохранить</button>
+        <button class="af-cancel" onclick="closeAddForm()">Отмена</button>
+        <span class="af-err" id="afErr"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conflict banner -->
+  <div id="conflictBanner">
+    <div class="cb-icon">⚠️</div>
+    <div class="cb-body">
+      <div class="cb-title" id="cbTitle">Обнаружены пересекающиеся периоды</div>
+      <div class="cb-list" id="cbList"></div>
+      <div class="cb-hint">Строки с конфликтом выделены в таблице. Отредактируйте даты или удалите лишние записи.</div>
+    </div>
+    <button class="cb-close" onclick="document.getElementById('conflictBanner').classList.remove('show')" title="Скрыть">✕</button>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-wrap">
+    <div class="tbl-scroll">
+      <table id="mainTbl">
+        <thead>
+          <tr>
+            <th>Артикул</th>
+            <th>Арт ВБ / SKU</th>
+            <th class="r">Перем. с/с</th>
+            <th class="r">Пост. с/с</th>
+            <th class="r">Итого с/с</th>
+            <th>Период</th>
+            <th>Статус</th>
+            <th>Комментарий</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="mainTbody">
+          <tr><td colspan="9" class="empty-msg">Загрузка…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Upload modal -->
+<div id="uploadModal">
+  <div class="um-box">
+    <div class="um-title">📥 Загрузка себестоимости из файла</div>
+    <div class="um-drop" id="dropZone" onclick="document.getElementById('fileInput').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="fileInput" accept=".xlsx,.csv" onchange="handleFile(this.files[0])">
+      <div>Перетащите файл или <b>нажмите для выбора</b></div>
+      <div style="font-size:11px;margin-top:4px">Принимаются .xlsx и .csv</div>
+    </div>
+    <div class="um-preview" id="umPreview"></div>
+    <div class="um-actions">
+      <span class="um-status" id="umStatus">Выберите файл</span>
+      <button class="um-close" onclick="closeUploadModal()">Закрыть</button>
+      <button class="um-commit" id="umCommit" disabled onclick="commitUpload()">Загрузить</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── Config ──────────────────────────────────────────────────────
+// БЫЛ service_role-ключ в открытом JS + пароль открытым текстом в этом же файле
+// ('abello2024') — реальная уязвимость при публикации (полный доступ к БД в
+// обход RLS любому читателю исходника). Заменено на анонимный ключ + настоящий
+// Supabase Auth логин, та же схема, что в rnp_v6_live.html. Требует
+// migration_admin_pages_rls.sql (даёт authenticated права записи в article_costs
+// — раньше запись туда была разрешена ТОЛЬКО service_role).
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+
+// ── State ────────────────────────────────────────────────────────
+let CMP = 'wb';
+let ARTICLES = [];   // {id, seller_article, marketplace_id, name, category, photo_url}
+let COSTS    = [];   // article_costs rows
+let EDIT_ID  = null; // ID записи при редактировании
+let UPLOAD_PENDING = null; // [{article_id, variable_cost, fixed_cost, valid_from, valid_to, note}]
+
+// ── Auth (настоящий Supabase Auth) ────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('emailInp').value.trim();
+  const pass  = document.getElementById('pwdInp').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { CURRENT_SESSION = session; document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; init(); }
+})();
+
+// ── API helpers ──────────────────────────────────────────────────
+async function sbGet(path) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` }
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbInsert(table, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+      'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbUpdate(table, id, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+      'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbDelete(table, id) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` }
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+async function sbUpsert(table, rows, onConflict) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method: 'POST',
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+      'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(rows)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPatchFilter(table, filter, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH',
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}`,
+      'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+// Вычисляет дату на 1 день раньше (YYYY-MM-DD)
+function prevDay(dateStr) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// Закрывает все открытые записи (valid_to=null) артикула с valid_from < newFrom
+// Устанавливает им valid_to = newFrom - 1 день
+async function closeOpenRecords(artId, newFrom) {
+  const filter = `article_id=eq.${artId}&valid_to=is.null&valid_from=lt.${newFrom}`;
+  await sbPatchFilter('article_costs', filter, {
+    valid_to: prevDay(newFrom),
+    updated_at: new Date().toISOString()
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  await loadAll();
+}
+
+async function loadAll() {
+  const mpDb = CMP;
+  const [arts, costs] = await Promise.all([
+    sbGet(`articles?select=id,seller_article,marketplace_id,name,category,photo_url&marketplace=eq.${mpDb}&order=category,seller_article&limit=1000`),
+    sbGet(`article_costs?select=*,articles(seller_article,marketplace_id,name,category,photo_url)&articles.marketplace=eq.${mpDb}&order=valid_from.desc&limit=2000`)
+  ]);
+  ARTICLES = arts;
+  // filter costs to current marketplace
+  COSTS = costs.filter(c => c.articles);
+
+  // populate article select
+  const sel = document.getElementById('afArticle');
+  sel.innerHTML = '<option value="">— выберите —</option>';
+  ARTICLES.forEach(a => {
+    const o = document.createElement('option');
+    o.value = a.id;
+    o.textContent = a.seller_article + (a.name ? ` — ${a.name.slice(0,40)}` : '');
+    sel.appendChild(o);
+  });
+
+  // populate category filter
+  const cats = [...new Set(ARTICLES.map(a => a.category).filter(Boolean))].sort();
+  const fCat = document.getElementById('fCat');
+  fCat.innerHTML = '<option value="">Все категории</option>';
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; fCat.appendChild(o); });
+
+  renderTable();
+}
+
+// ── Marketplace switch ────────────────────────────────────────────
+function setMp(mp, btn) {
+  CMP = mp;
+  document.querySelectorAll('.mpt').forEach(b => b.className = 'mpt');
+  btn.classList.add(mp === 'wb' ? 'wb' : 'oz');
+  loadAll();
+}
+
+// ── Status logic ─────────────────────────────────────────────────
+function getStatus(row) {
+  const today = new Date().toISOString().slice(0,10);
+  const from = row.valid_from;
+  const to   = row.valid_to;
+  if (from > today) return 'future';
+  if (to && to < today) return 'expired';
+  return 'active';
+}
+function statusBadge(s, isConflict) {
+  if (isConflict) return '<span class="badge conflict">⚠ Конфликт</span>';
+  if (s === 'active')  return '<span class="badge active">● Активна</span>';
+  if (s === 'future')  return '<span class="badge future">◷ Будущая</span>';
+  return '<span class="badge expired">✕ Истекла</span>';
+}
+
+// ── Conflict detection ────────────────────────────────────────────
+// Возвращает Set из id записей, у которых пересекаются периоды с другой записью того же артикула
+function detectConflicts(costs) {
+  const FAR = '9999-12-31';
+  // Группируем по article_id
+  const byArt = {};
+  costs.forEach(c => {
+    if (!byArt[c.article_id]) byArt[c.article_id] = [];
+    byArt[c.article_id].push(c);
+  });
+
+  const conflictIds = new Set();
+  const conflictArts = {}; // article_id -> seller_article (для баннера)
+
+  for (const [artId, recs] of Object.entries(byArt)) {
+    if (recs.length < 2) continue;
+    // Сортируем по valid_from
+    const sorted = [...recs].sort((a, b) => a.valid_from.localeCompare(b.valid_from));
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const a = sorted[i], b = sorted[j];
+        const aTo = a.valid_to || FAR;
+        const bTo = b.valid_to || FAR;
+        // Пересечение: a.from <= b.to AND b.from <= a.to
+        if (a.valid_from <= bTo && b.valid_from <= aTo) {
+          conflictIds.add(a.id);
+          conflictIds.add(b.id);
+          if (!conflictArts[artId]) {
+            conflictArts[artId] = a.articles ? a.articles.seller_article : `арт. ${artId}`;
+          }
+        }
+      }
+    }
+  }
+  return { conflictIds, conflictArts };
+}
+
+function renderConflictBanner(conflictArts) {
+  const banner = document.getElementById('conflictBanner');
+  const entries = Object.values(conflictArts);
+  if (!entries.length) { banner.classList.remove('show'); return; }
+  const n = entries.length;
+  document.getElementById('cbTitle').textContent =
+    `Обнаружены пересекающиеся периоды: ${n} ${n === 1 ? 'артикул' : n < 5 ? 'артикула' : 'артикулов'}`;
+  document.getElementById('cbList').innerHTML =
+    entries.map(sa => `<span class="cb-art">${sa}</span>`).join('');
+  banner.classList.add('show');
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function Fk(v) {
+  if (!v && v !== 0) return '—';
+  return Number(v).toLocaleString('ru-RU', {minimumFractionDigits:0, maximumFractionDigits:0}) + ' ₽';
+}
+function fmtDate(d) { return d ? d.slice(0,10).split('-').reverse().join('.') : ''; }
+
+function renderTable() {
+  const q   = document.getElementById('searchInp').value.toLowerCase();
+  const cat = document.getElementById('fCat').value;
+  const st  = document.getElementById('fStatus').value;
+
+  // Проверяем конфликты по всему массиву (не только отфильтрованному)
+  const { conflictIds, conflictArts } = detectConflicts(COSTS);
+  renderConflictBanner(conflictArts);
+
+  const rows = COSTS.filter(c => {
+    const a = c.articles;
+    if (!a) return false;
+    if (cat && a.category !== cat) return false;
+    if (q && !a.seller_article.toLowerCase().includes(q) && !(a.marketplace_id||'').toLowerCase().includes(q)) return false;
+    const s = getStatus(c);
+    // Конфликтные строки показываем всегда вне зависимости от фильтра статуса
+    if (st && s !== st && !conflictIds.has(c.id)) return false;
+    return true;
+  });
+
+  // summary
+  const all    = COSTS.length;
+  const active = COSTS.filter(c => getStatus(c) === 'active').length;
+  const future = COSTS.filter(c => getStatus(c) === 'future').length;
+  const activeRows = COSTS.filter(c => getStatus(c) === 'active');
+  const varAvg = activeRows.length ? activeRows.reduce((s,c) => s + (+c.variable_cost||0), 0) / activeRows.length : 0;
+  const totAvg = activeRows.length ? activeRows.reduce((s,c) => s + (+c.variable_cost||0) + (+c.fixed_cost||0), 0) / activeRows.length : 0;
+  document.getElementById('sumTotal').textContent   = all;
+  document.getElementById('sumActive').textContent  = active;
+  document.getElementById('sumFuture').textContent  = future;
+  document.getElementById('sumVarAvg').textContent  = activeRows.length ? Fk(Math.round(varAvg)) : '—';
+  document.getElementById('sumTotalAvg').textContent = activeRows.length ? Fk(Math.round(totAvg)) : '—';
+
+  const tbody = document.getElementById('mainTbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">Записей не найдено</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(c => {
+    const a      = c.articles;
+    const tot    = (+c.variable_cost||0) + (+c.fixed_cost||0);
+    const s      = getStatus(c);
+    const isConf = conflictIds.has(c.id);
+    const img    = a.photo_url
+      ? `<img class="art-img" src="${a.photo_url}" onerror="this.style.display='none'">`
+      : `<div class="art-img"></div>`;
+    const periodTo = c.valid_to ? fmtDate(c.valid_to) : '∞ бессрочно';
+    return `<tr class="${isConf ? 'conflict-row' : ''}">
+      <td>
+        <div class="art-cell">
+          ${img}
+          <div>
+            <div class="art-name">${a.seller_article}</div>
+            <div class="art-sub">${a.category||''}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="wb-id">${a.marketplace_id||'—'}</span></td>
+      <td class="r">${Fk(c.variable_cost)}</td>
+      <td class="r">${c.fixed_cost > 0 ? Fk(c.fixed_cost) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="r"><span class="cost-total">${Fk(tot)}</span></td>
+      <td class="period-cell">
+        <div class="period-from">с ${fmtDate(c.valid_from)}</div>
+        <div class="period-to">по ${periodTo}</div>
+      </td>
+      <td>${statusBadge(s, isConf)}</td>
+      <td style="color:var(--text3);font-size:11px;max-width:160px">${c.note||''}</td>
+      <td>
+        <div class="row-actions">
+          <button class="ra" onclick="openEditForm(${c.id})">✏</button>
+          <button class="ra del" onclick="deleteRecord(${c.id})">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Add / Edit form ───────────────────────────────────────────────
+function openAddForm() {
+  EDIT_ID = null;
+  document.getElementById('addFormTitle').textContent = 'Новая запись себестоимости';
+  document.getElementById('afArticle').value = '';
+  document.getElementById('afVar').value    = '';
+  document.getElementById('afFixed').value  = '';
+  document.getElementById('afFrom').value   = new Date().toISOString().slice(0,10);
+  document.getElementById('afTo').value     = '';
+  document.getElementById('afNote').value   = '';
+  document.getElementById('afErr').textContent = '';
+  document.getElementById('addForm').classList.add('open');
+  document.getElementById('afArticle').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function openEditForm(id) {
+  const c = COSTS.find(x => x.id === id);
+  if (!c) return;
+  EDIT_ID = id;
+  document.getElementById('addFormTitle').textContent = 'Редактировать запись';
+  document.getElementById('afArticle').value = c.article_id;
+  document.getElementById('afVar').value     = c.variable_cost||'';
+  document.getElementById('afFixed').value   = c.fixed_cost||'';
+  document.getElementById('afFrom').value    = c.valid_from||'';
+  document.getElementById('afTo').value      = c.valid_to||'';
+  document.getElementById('afNote').value    = c.note||'';
+  document.getElementById('afErr').textContent = '';
+  document.getElementById('addForm').classList.add('open');
+  document.getElementById('addForm').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeAddForm() {
+  EDIT_ID = null;
+  document.getElementById('addForm').classList.remove('open');
+}
+
+async function saveRecord() {
+  const artId = document.getElementById('afArticle').value;
+  const varC  = parseFloat(document.getElementById('afVar').value);
+  const fixC  = parseFloat(document.getElementById('afFixed').value)||0;
+  const from  = document.getElementById('afFrom').value;
+  const to    = document.getElementById('afTo').value||null;
+  const note  = document.getElementById('afNote').value.trim()||null;
+
+  if (!artId) { document.getElementById('afErr').textContent = 'Выберите артикул'; return; }
+  if (isNaN(varC) || varC < 0) { document.getElementById('afErr').textContent = 'Укажите переменную с/с'; return; }
+  if (!from) { document.getElementById('afErr').textContent = 'Укажите дату начала'; return; }
+
+  const body = { article_id: +artId, variable_cost: varC, fixed_cost: fixC,
+    valid_from: from, valid_to: to, note, updated_at: new Date().toISOString() };
+
+  try {
+    if (EDIT_ID) {
+      await sbUpdate('article_costs', EDIT_ID, body);
+    } else {
+      // Закрываем предыдущие открытые записи этого артикула до новой даты
+      await closeOpenRecords(+artId, from);
+      await sbInsert('article_costs', body);
+    }
+    closeAddForm();
+    await loadAll();
+  } catch(e) {
+    document.getElementById('afErr').textContent = 'Ошибка: ' + e.message.slice(0,80);
+  }
+}
+
+async function deleteRecord(id) {
+  if (!confirm('Удалить запись?')) return;
+  try {
+    await sbDelete('article_costs', id);
+    await loadAll();
+  } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+// ── Template download ─────────────────────────────────────────────
+function downloadTemplate() {
+  const wb2 = XLSX.utils.book_new();
+  // Data sheet
+  const header = ['seller_article','marketplace_id','variable_cost','fixed_cost','valid_from','valid_to','note'];
+  const example = ARTICLES.slice(0,3).map(a => [
+    a.seller_article, a.marketplace_id||'', '', '', new Date().toISOString().slice(0,10), '', ''
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...example]);
+  ws['!cols'] = [22,16,14,14,12,12,30].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb2, ws, 'Себестоимость');
+  // Instructions
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    ['Поле','Обязательное','Описание'],
+    ['seller_article','Да','Артикул продавца (точно как в системе)'],
+    ['marketplace_id','Нет','Артикул ВБ (nmID) или SKU OZON — для справки, не используется для поиска'],
+    ['variable_cost','Да','Переменная себестоимость ₽/шт (закупка, производство)'],
+    ['fixed_cost','Нет','Постоянная себестоимость ₽/шт (аллокация накладных). По умолчанию 0'],
+    ['valid_from','Да','Дата начала периода (ГГГГ-ММ-ДД)'],
+    ['valid_to','Нет','Дата окончания (ГГГГ-ММ-ДД). Пусто = бессрочно'],
+    ['note','Нет','Комментарий (пересмотр цены, новый поставщик и т.д.)'],
+    ['','',''],
+    ['','','Поиск артикула выполняется только по seller_article.'],
+    ['','','Если артикул не найден — строка пропускается с ошибкой.'],
+  ]);
+  ws2['!cols'] = [{wch:18},{wch:14},{wch:55}];
+  XLSX.utils.book_append_sheet(wb2, ws2, 'Инструкция');
+  XLSX.writeFile(wb2, 'template_costs.xlsx');
+}
+
+// ── Upload modal ──────────────────────────────────────────────────
+function openUploadModal() {
+  UPLOAD_PENDING = null;
+  document.getElementById('umPreview').classList.remove('show');
+  document.getElementById('umStatus').textContent = 'Выберите файл';
+  document.getElementById('umCommit').disabled = true;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('uploadModal').classList.add('open');
+}
+function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+}
+function handleFile(f) {
+  if (!f) return;
+  const ext = f.name.split('.').pop().toLowerCase();
+  if (ext === 'xlsx') {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb2 = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb2.Sheets[wb2.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      parseAOA(aoa);
+    };
+    reader.readAsArrayBuffer(f);
+  } else {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const lines = ev.target.result.split('\n');
+      const aoa = lines.map(l => l.split(',').map(v => v.trim().replace(/^"|"$/g,'')));
+      parseAOA(aoa);
+    };
+    reader.readAsText(f, 'UTF-8');
+  }
+}
+
+function parseAOA(aoa) {
+  if (!aoa || aoa.length < 2) { document.getElementById('umStatus').textContent = 'Файл пустой'; return; }
+  const header = aoa[0].map(v => String(v||'').trim().toLowerCase());
+  const iSA   = header.indexOf('seller_article');
+  const iVar  = header.indexOf('variable_cost');
+  const iFix  = header.indexOf('fixed_cost');
+  const iFrom = header.indexOf('valid_from');
+  const iTo   = header.indexOf('valid_to');
+  const iNote = header.indexOf('note');
+
+  if (iSA < 0 || iVar < 0 || iFrom < 0) {
+    document.getElementById('umStatus').textContent = 'Не найдены обязательные колонки: seller_article, variable_cost, valid_from';
+    return;
+  }
+
+  const artMap = {};
+  ARTICLES.forEach(a => { artMap[a.seller_article] = a.id; });
+
+  const ok = [], errors = [];
+  for (let i = 1; i < aoa.length; i++) {
+    const row = aoa[i].map(v => String(v===null||v===undefined?'':v).trim());
+    if (!row[iSA]) continue;
+    const sa  = row[iSA];
+    const artId = artMap[sa];
+    if (!artId) { errors.push({row: i+1, sa, reason: 'Артикул не найден'}); continue; }
+    const varC = parseFloat(row[iVar]);
+    if (isNaN(varC) || varC < 0) { errors.push({row: i+1, sa, reason: 'Неверная переменная с/с'}); continue; }
+    const fixC = parseFloat(row[iFix])||0;
+    const from = row[iFrom];
+    if (!from) { errors.push({row: i+1, sa, reason: 'Не указана дата начала'}); continue; }
+    const to   = (iTo >= 0 && row[iTo]) ? row[iTo] : null;
+    const note = (iNote >= 0 && row[iNote]) ? row[iNote] : null;
+    ok.push({ article_id: artId, variable_cost: varC, fixed_cost: fixC,
+      valid_from: from, valid_to: to, note, _sa: sa });
+  }
+
+  UPLOAD_PENDING = ok;
+
+  // Build preview table
+  const prevRows = [...ok.map(r => ({...r, _err: false})), ...errors.map(r => ({...r, _err: true}))];
+  const prevHtml = `<table>
+    <tr><th>#</th><th>Артикул</th><th>Перем. с/с</th><th>Пост. с/с</th><th>Период с</th><th>По</th><th>Статус</th></tr>
+    ${prevRows.map((r,i) => `<tr class="${r._err?'err-row':''}">
+      <td>${i+1}</td>
+      <td>${r._sa||r.sa}</td>
+      <td>${r._err?'—':Fk(r.variable_cost)}</td>
+      <td>${r._err?'—':Fk(r.fixed_cost)}</td>
+      <td>${r._err?'—':r.valid_from}</td>
+      <td>${r._err?'—':(r.valid_to||'∞')}</td>
+      <td>${r._err?'⚠ '+r.reason:'✓ ок'}</td>
+    </tr>`).join('')}
+  </table>`;
+  const prev = document.getElementById('umPreview');
+  prev.innerHTML = prevHtml;
+  prev.classList.add('show');
+
+  const msg = `Готово к загрузке: ${ok.length} строк${errors.length ? `, ошибок: ${errors.length}` : ''}`;
+  document.getElementById('umStatus').textContent = msg;
+  document.getElementById('umCommit').disabled = ok.length === 0;
+}
+
+async function commitUpload() {
+  if (!UPLOAD_PENDING || !UPLOAD_PENDING.length) return;
+  const btn = document.getElementById('umCommit');
+  btn.disabled = true;
+  btn.textContent = 'Загружаю…';
+  try {
+    // Сортируем по (article_id, valid_from) чтобы закрывать записи в правильном порядке
+    const sorted = [...UPLOAD_PENDING].sort((a, b) =>
+      a.article_id !== b.article_id
+        ? a.article_id - b.article_id
+        : a.valid_from.localeCompare(b.valid_from)
+    );
+
+    // Закрываем открытые записи перед вставкой каждой новой
+    // Группируем: для каждого артикула берём все valid_from из файла
+    const byArt = {};
+    sorted.forEach(r => {
+      if (!byArt[r.article_id]) byArt[r.article_id] = [];
+      byArt[r.article_id].push(r.valid_from);
+    });
+    // Закрываем: открытые записи до первой из загружаемых дат по каждому артикулу
+    for (const [artId, froms] of Object.entries(byArt)) {
+      const minFrom = froms.sort()[0];
+      await closeOpenRecords(+artId, minFrom);
+    }
+
+    // Upsert всех записей
+    const rows = sorted.map(r => ({
+      article_id: r.article_id, variable_cost: r.variable_cost, fixed_cost: r.fixed_cost,
+      valid_from: r.valid_from, valid_to: r.valid_to, note: r.note,
+      updated_at: new Date().toISOString()
+    }));
+    await sbUpsert('article_costs', rows, 'article_id,valid_from');
+
+    // Для записей внутри загрузки: закрываем предыдущую следующей (если valid_to не задан)
+    for (const [artId, froms] of Object.entries(byArt)) {
+      const fs = froms.sort();
+      for (let i = 0; i < fs.length - 1; i++) {
+        // Закрываем запись fs[i] датой fs[i+1] - 1 день (если у неё valid_to не задан)
+        await sbPatchFilter('article_costs',
+          `article_id=eq.${artId}&valid_from=eq.${fs[i]}&valid_to=is.null`,
+          { valid_to: prevDay(fs[i+1]), updated_at: new Date().toISOString() }
+        );
+      }
+    }
+
+    closeUploadModal();
+    UPLOAD_PENDING = null;
+    await loadAll();
+  } catch(e) {
+    document.getElementById('umStatus').textContent = 'Ошибка: ' + e.message.slice(0,120);
+    btn.disabled = false;
+    btn.textContent = 'Загрузить';
+  }
+}
+</script>
+</body>
+</html>
