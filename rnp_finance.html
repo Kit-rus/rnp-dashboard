@@ -24,19 +24,16 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
 .mpt.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;max-height:min(70vh,640px);overflow:auto}
 table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
-/* position:sticky ПО TOP не работает на <th>/<td> в этом рендеринге (проверено
-   вживую: делает delta=0 только если применить к <tr> целиком — на ячейках
-   остаётся статичной строкой, даже если computed position:sticky). Поэтому
-   верхняя фиксация — на строке (tr:first-child, tr.hscroll-row), а не на
-   ячейках. Левая фиксация (первая колонка) по left — на ячейках, тут работает
-   нормально; сочетание "строка липнет по top + одна её ячейка ещё и по left"
-   (угловая ячейка) подтверждено рабочим. */
-tr:first-child{position:sticky;top:0;z-index:2;background:var(--card)}
-th{color:var(--text2);text-align:right;font-weight:500;padding:5px 10px;border-bottom:1px solid var(--border);background:var(--card)}
+/* Пробовали sticky на <tr> целиком (вместо ячеек) — в тестовом браузере
+   работало, но на реальном телефоне пользователя строки наезжали друг на
+   друга (нашли 22.09.2026 по скриншотам — шапка и бегунок ломали высоту
+   соседних строк). Вернулись к стандартному варианту: sticky на самих
+   ячейках — это общепринятый, максимально совместимый способ фиксировать
+   шапку таблицы, именно его и стоило использовать с самого начала. */
+th{color:var(--text2);text-align:right;font-weight:500;padding:5px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:2}
 th:first-child,td.lbl{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:250px}
 th:first-child{z-index:3}
-tr.hscroll-row{position:sticky;z-index:2;background:var(--card)}
-tr.hscroll-row td{padding:0;border-bottom:1px solid var(--border);background:var(--card)}
+tr.hscroll-row td{padding:0;border-bottom:1px solid var(--border);position:sticky;background:var(--card);z-index:2}
 .hscroll-track{height:10px;background:var(--border);border-radius:5px;margin:3px 8px;position:relative;cursor:pointer;opacity:.4;transition:opacity .15s}
 .hscroll-track:hover,.hscroll-track.dragging{opacity:1}
 .hscroll-thumb{position:absolute;top:0;left:0;height:10px;background:var(--accent);border-radius:5px;cursor:grab;min-width:30px}
@@ -217,8 +214,7 @@ function initHScroll(cardBodyId){
 
   // Строка-бегунок прилипает СРАЗУ ПОД шапкой — офсет = реальная высота
   // шапки (не хардкодим px, чтобы не разъехалось при другом масштабе/шрифте).
-  // top — на самой <tr> (см. коммент в CSS про sticky на ячейках).
-  hsRow.style.top = headerRow.offsetHeight+'px';
+  hsRow.querySelector('td').style.top = headerRow.offsetHeight+'px';
 
   function update(){
     const visibleW=card.clientWidth, contentW=table.scrollWidth;
