@@ -22,18 +22,21 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
 .mpt{padding:6px 16px;border:1px solid var(--border);background:var(--card);color:var(--text2);
   border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
 .mpt.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;max-height:min(70vh,640px);overflow:auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;max-height:min(70vh,640px);overflow:auto;-webkit-overflow-scrolling:touch}
 table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
 /* Пробовали sticky на <tr> целиком (вместо ячеек) — в тестовом браузере
    работало, но на реальном телефоне пользователя строки наезжали друг на
-   друга (нашли 22.09.2026 по скриншотам — шапка и бегунок ломали высоту
-   соседних строк). Вернулись к стандартному варианту: sticky на самих
-   ячейках — это общепринятый, максимально совместимый способ фиксировать
-   шапку таблицы, именно его и стоило использовать с самого начала. */
-th{color:var(--text2);text-align:right;font-weight:500;padding:5px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:2}
-th:first-child,td.lbl{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:250px}
+   друга. Вернулись к стандартному варианту: sticky на самих ячейках.
+   Отдельная проблема (найдена 22.09.2026 по скриншотам ПОЛЬЗОВАТЕЛЯ,
+   именно ВО ВРЕМЯ скролла, не в статике): sticky-ячейки таблицы на мобиле
+   не всегда получают свой отдельный композитный GPU-слой — во время
+   скролла старый и новый кадр "смазываются"/накладываются, пока скролл не
+   остановится. translateZ(0) + will-change:transform форсируют отдельный
+   слой для sticky-элементов — стандартный фикс именно этого класса бага. */
+th{color:var(--text2);text-align:right;font-weight:500;padding:5px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:2;transform:translateZ(0);will-change:transform}
+th:first-child,td.lbl{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:250px;transform:translateZ(0);will-change:transform}
 th:first-child{z-index:3}
-tr.hscroll-row td{padding:0;border-bottom:1px solid var(--border);position:sticky;background:var(--card);z-index:2}
+tr.hscroll-row td{padding:0;border-bottom:1px solid var(--border);position:sticky;background:var(--card);z-index:2;transform:translateZ(0);will-change:transform}
 .hscroll-track{height:10px;background:var(--border);border-radius:5px;margin:3px 8px;position:relative;cursor:pointer;opacity:.4;transition:opacity .15s}
 .hscroll-track:hover,.hscroll-track.dragging{opacity:1}
 .hscroll-thumb{position:absolute;top:0;left:0;height:10px;background:var(--accent);border-radius:5px;cursor:grab;min-width:30px}
