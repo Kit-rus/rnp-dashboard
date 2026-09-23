@@ -72,13 +72,6 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .sel{padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);font-size:11px;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans)}
 .kstrip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:1rem}
 #kpi-breakdown.hidden{display:none}
-/* ── Темп месяца: факт с начала месяца vs линейный план-темп на сегодня ──
-   Отдельный блок НАД .kstrip (тот — месячный итог, этот — "на сегодня").
-   Показывается только для текущего месяца — см. renderPaceStrip(). */
-.pacewrap{margin-bottom:8px}
-.pacehdr{font-size:10px;color:var(--color-text-tertiary);font-weight:500;margin-bottom:5px}
-.pacestrip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.pc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px;border:1px dashed var(--color-border-secondary)}
 .kc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px}
 .kl{font-size:10px;color:var(--color-text-tertiary);margin-bottom:1px}
 .kv{font-size:16px;font-weight:500;color:var(--color-text-primary);line-height:1.1}
@@ -323,14 +316,6 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   </div>
 </div>
 
-<div id="pacewrap"></div>
-<div style="display:flex;justify-content:flex-end;margin-bottom:4px">
-  <button class="sel" onclick="toggleKpiBreakdown()"
-    style="cursor:pointer;font-size:11px"
-    title="Заказы/Продажи/Выручка — факт и план по категориям и цветомоделям">
-    План кол-во ▾
-  </button>
-</div>
 <div class="kstrip" id="kstrip"></div>
 <div id="kpi-breakdown" class="hidden"></div>
 
@@ -679,11 +664,6 @@ function buildArticles(rows){
       plan_spend:parseFloat(r.plan_spend)||0,
       plan_vc:parseFloat(r.plan_variable_cost)||0,
       plan_fc:parseFloat(r.plan_fixed_cost)||0,
-      // %, 0-100 — требует migration_plan_pct_fields.sql (добавляет эти 3 поля
-      // во вьюху v_daily_dashboard); до применения миграции будут просто 0/undefined.
-      plan_comm_pct:parseFloat(r.plan_commission_pct)||0,
-      plan_logi_pct:parseFloat(r.plan_logistics_pct)||0,
-      plan_stor_pct:parseFloat(r.plan_storage_pct)||0,
       commission_sum:parseFloat(r.commission_sum)||0,
       commission_pct:parseFloat(r.commission_pct)||0,
       acquiring_sum:parseFloat(r.acquiring_sum)||0,
@@ -787,39 +767,18 @@ function buildKPI(rows,mp){
   // артикулу, что totalLogi выше — logistics_sum уже месячный, не дневной).
   const logiPct = revenue>0 ? (totalLogi*npRatio)/revenue*100 : 0;
 
-  // Выкупаемость + план по категориям и цветомоделям — детализация под
-  // карточкой "Выкупаемость" (та же формула buyQty/ordQty для факта, что и
-  // общий итог выше, но по группам). 24.09.2026: добавлен план (Заказы/
-  // Продажи/Выручка) — раньше в этой разбивке был только факт, план видели
-  // только на общем итоге по кабинету или на отдельном артикуле, не по
-  // категории/цветомодели, хотя именно так аналитику и хотели смотреть.
-  // Факт суммируем по ВСЕМ строкам группы (каждая строка — день, сумма по
-  // дням = факт за период). План — flat-значение, повторяется на КАЖДОЙ
-  // дневной строке одного артикула, поэтому считаем его отдельным проходом
-  // с dedup по seller_article (иначе план умножился бы на число дней).
+  // Выкупаемость по категориям и цветомоделям — детализация под карточкой
+  // "Выкупаемость" (та же формула buyQty/ordQty, что и общий итог выше, но по группам).
   const groupBuyout = keyFn => {
     const g = {};
     for (const r of rows) {
       const k = keyFn(r) || '(без категории)';
-      if (!g[k]) g[k] = {ord:0, buy:0, rev:0};
+      if (!g[k]) g[k] = {ord:0, buy:0};
       g[k].ord += parseInt(r.orders_qty)||0;
       g[k].buy += parseInt(r.confirmed_qty)||0;
-      g[k].rev += parseFloat(r.confirmed_sum)||0;
-    }
-    const seenPlan = new Set();
-    for (const r of rows) {
-      if (seenPlan.has(r.seller_article)) continue;
-      seenPlan.add(r.seller_article);
-      const k = keyFn(r) || '(без категории)';
-      if (!g[k]) continue; // группа без единой фактической строки — план ей тоже не покажем
-      g[k].planOrd = (g[k].planOrd||0) + (parseInt(r.plan_orders_qty)||0);
-      g[k].planBuy = (g[k].planBuy||0) + (parseInt(r.plan_buyouts_qty)||0);
-      g[k].planRev = (g[k].planRev||0) + (parseFloat(r.plan_revenue)||0);
     }
     return Object.entries(g)
-      .map(([name,v])=>({name, ord:v.ord, buy:v.buy, rev:v.rev,
-        pct: v.ord>0 ? v.buy/v.ord*100 : 0,
-        planOrd:v.planOrd||0, planBuy:v.planBuy||0, planRev:v.planRev||0}))
+      .map(([name,v])=>({name, ord:v.ord, buy:v.buy, pct: v.ord>0 ? v.buy/v.ord*100 : 0}))
       .filter(x=>x.ord>0||x.buy>0)
       .sort((a,b)=>b.ord-a.ord);
   };
@@ -1150,20 +1109,6 @@ function fmtMetric(v,fmt){
   if(fmt==='k')return v>0?Fk(v):Nf(v);
   if(fmt==='pct')return v.toFixed(1)+'%';
   return Nf(v);
-}
-
-// Строка "факт / план [%]" для колонки s2 (plan-col) — общая для строки
-// артикула И строки категории (24.09.2026: раньше жила только внутри
-// per-артикульного цикла, категориям план вообще не показывался).
-function mkPR(lbl, fact, plan, fmt) {
-  const f = fmt(fact);
-  if (!fact && !plan) return '';
-  const pct = plan > 0 ? Math.round(fact / plan * 100) : null;
-  const cls = pct === null ? '' : pct >= 100 ? 'pv' : pct >= 70 ? 'nw' : 'nv';
-  const planPart = plan
-    ? `<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span><span class="pr-pct ${cls}">${pct}%</span>`
-    : '';
-  return `<div class="pr-row"><span class="pr-lbl">${lbl}</span><span class="pr-fact">${f}</span>${planPart}</div>`;
 }
 // % от выручки (той же базы, что раньше использовал dayAllHTML: ftrev дня, а если его
 // нет — mrev, месячная выручка артикула, как fallback — см. коммент у gateDay в v6_live).
@@ -1527,60 +1472,6 @@ function renderKPI(){
     </div>`;
   }).join('');
   renderKpiBreakdown();
-  renderPaceStrip();
-}
-
-// ─── Темп месяца: факт с начала месяца vs линейный план-темп на сегодня ───
-// Отдельно от .kstrip (тот — факт/план ЗА ВЕСЬ месяц, месячный итог, уже
-// работал сам по себе как только появились данные в monthly_plans). Этот
-// блок — "на сегодняшний день месяца мы должны быть на такой-то отметке,
-// если равномерно распределить план по дням" — по Заказам/Продажам, ту же
-// пару, что уже есть первыми двумя карточками kstrip (переиспользуем их
-// готовые d.kpi[...].v/.plan, не пересчитываем заново). Без "Выкуп %" —
-// это доля/процент, не накопительный счётчик, "темп" на неё не накладывается
-// так же осмысленно, и она и так уже есть в kstrip как "Выкупаемость"
-// (дублировать не нужно, подтверждено пользователем).
-function renderPaceStrip(){
-  const box=document.getElementById('pacewrap');
-  const d=DATA[CMP];
-  const today=new Date();
-  // Блок осмысленен только для ТЕКУЩЕГО месяца — на прошлых/будущих "план на
-  // сегодня внутри месяца" не значит ничего (месяц уже закрыт или ещё не начался).
-  const isCurrentMonth = d && CYEAR===today.getFullYear() && CMONTH===today.getMonth()+1;
-  if(!isCurrentMonth){ box.innerHTML=''; return; }
-
-  const dayOfMonth=today.getDate();
-  const daysInMonth=new Date(CYEAR,CMONTH,0).getDate();
-  const monthFrac=dayOfMonth/daysInMonth;
-
-  const kOrd=d.kpi.find(k=>k.l==='Заказы');
-  const kSls=d.kpi.find(k=>k.l==='Продажи');
-  const rows=[kOrd,kSls].filter(k=>k && k.plan!==null);
-  if(!rows.length){ box.innerHTML=''; return; }
-
-  const cards=rows.map(k=>{
-    const fact=parseFloat(k.v)||0;
-    const planTotal=parseFloat(k.plan)||0;
-    const paceTarget=planTotal*monthFrac;
-    const pct=paceTarget>0?Math.round(fact/paceTarget*100):null;
-    const cls=pct===null?'':pct>=95?'ok':pct>=80?'warn':'err';
-    const barColor=cls==='ok'?'var(--color-text-success)':cls==='warn'?'#d97706':'var(--color-text-danger)';
-    return `<div class="pc">
-      <div class="kl">${k.l} на сегодня</div>
-      <div class="kv">${k.v}</div>
-      <div class="krow" style="margin-top:3px">
-        <span class="kp">план&nbsp;${Math.round(paceTarget)}</span>
-        ${pct!==null?`<span class="bd ${cls}">${pct}%</span>`:''}
-      </div>
-      <div class="kpbar" style="margin-top:4px"><div class="kpfill"
-        style="width:${pct===null?0:Math.min(pct,100)}%;background:${barColor}"></div></div>
-    </div>`;
-  }).join('');
-
-  box.innerHTML=`<div class="pacewrap">
-    <div class="pacehdr">ТЕМП МЕСЯЦА — день ${dayOfMonth} из ${daysInMonth}</div>
-    <div class="pacestrip">${cards}</div>
-  </div>`;
 }
 
 // ─── Разворачиваемая детализация "Выкупаемость" по категориям/цветомоделям ────
@@ -1596,31 +1487,20 @@ function renderKpiBreakdown(){
   const k=d&&d.kpi&&d.kpi.find(x=>x.expand);
   if(!KPI_BREAKDOWN_OPEN||!k){box.innerHTML='';box.classList.add('hidden');return;}
   box.classList.remove('hidden');
-  // Ячейка "факт / план %" — тот же формат, что mkPR(), но компактно внутри
-  // одной табличной ячейки (без подписи метрики — она уже в заголовке столбца).
-  const planCell=(fact,plan,fmt)=>{
-    if(!fact&&!plan) return '—';
-    if(!plan) return fmt(fact);
-    const pct=Math.round(fact/plan*100);
-    const cls=pct>=95?'pv':pct>=80?'':'nv';
-    return `${fmt(fact)}<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span> <b class="${cls}">${pct}%</b>`;
-  };
   const tbl=(title,list)=>`
-    <div style="flex:1;min-width:280px">
+    <div style="flex:1;min-width:220px">
       <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--color-text-secondary)">${title}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <tr style="color:var(--color-text-tertiary);text-align:left">
           <th style="padding:2px 6px 2px 0;font-weight:500">Название</th>
-          <th style="padding:2px 6px;font-weight:500;text-align:right">Заказы (факт/план)</th>
-          <th style="padding:2px 6px;font-weight:500;text-align:right">Продажи (факт/план)</th>
-          <th style="padding:2px 6px;font-weight:500;text-align:right">Выручка (факт/план)</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Заказы</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Продажи</th>
           <th style="padding:2px 0;font-weight:500;text-align:right">Выкуп %</th>
         </tr>
         ${list.map(x=>`<tr>
           <td style="padding:2px 6px 2px 0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x.name}">${x.name}</td>
-          <td style="padding:2px 6px;text-align:right">${planCell(x.ord,x.planOrd,v=>v)}</td>
-          <td style="padding:2px 6px;text-align:right">${planCell(x.buy,x.planBuy,v=>v)}</td>
-          <td style="padding:2px 6px;text-align:right">${planCell(x.rev,x.planRev,v=>Nf(v)+'₽')}</td>
+          <td style="padding:2px 6px;text-align:right">${x.ord}</td>
+          <td style="padding:2px 6px;text-align:right">${x.buy}</td>
           <td style="padding:2px 0;text-align:right;font-weight:600">${x.pct.toFixed(1)}%</td>
         </tr>`).join('')}
       </table>
@@ -1890,30 +1770,6 @@ function render(){
       ? (_cpArts.reduce((s,a)=>s+a.commission_pct*a.commission_sum,0)/_cpArts.reduce((s,a)=>s+a.commission_sum,0)).toFixed(1)
       : (catGross>0?(catComm/catGross*100).toFixed(1):null);
 
-    // ── План по категории (24.09.2026: раньше на групповых строках плана не
-    // было вообще, только факт — план показывался только на строке отдельного
-    // артикула). Простая сумма art.plan_* по всем артикулам категории — те же
-    // поля, что уже читает buildArticles()/mkPR() на строке артикула, здесь
-    // просто складываем по группе, ничего заново не запрашиваем. ДРР —
-    // невзвешенное среднее % по артикулам, у которых план ДРР задан (та же
-    // логика, что avgPlanDrr в buildKPI() для карточки в kstrip).
-    const catPlanOrd=arts.reduce((s,a)=>s+(a.plan_ord||0),0);
-    const catPlanBuy=arts.reduce((s,a)=>s+(a.plan_buy||0),0);
-    const catPlanRev=arts.reduce((s,a)=>s+(a.plan_rev||0),0);
-    const _drrArts=arts.filter(a=>a.plan_drr>0);
-    const catPlanDrr=_drrArts.length>0?_drrArts.reduce((s,a)=>s+a.plan_drr,0)/_drrArts.length:0;
-    // Комиссия/логистика плана — сумма ₽-сумм по артикулам (не среднее % —
-    // база выручки разная у каждого), та же формула, что у отдельного
-    // артикула (art.plan_rev×art.plan_comm_pct/100), только сложенная по группе.
-    const catPlanComm=arts.reduce((s,a)=>s+(a.plan_rev>0&&a.plan_comm_pct>0?a.plan_rev*a.plan_comm_pct/100:0),0);
-    const catPlanLogi=arts.reduce((s,a)=>s+(a.plan_rev>0&&a.plan_logi_pct>0?a.plan_rev*a.plan_logi_pct/100:0),0);
-    const catPlanNp=arts.reduce((s,a)=>{
-      if(!(a.plan_rev>0))return s;
-      const c=a.plan_comm_pct>0?a.plan_rev*a.plan_comm_pct/100:0;
-      const l=a.plan_logi_pct>0?a.plan_rev*a.plan_logi_pct/100:0;
-      return s+(a.plan_rev-a.plan_vc*a.plan_buy-a.plan_spend-c-l);
-    },0);
-
     // Восстанавливаем состояние свёртки после перерисовки
     const isCollapsed=!!CAT_COLLAPSED[catId];
     const iconChar=isCollapsed?'▶':'▼';
@@ -1937,15 +1793,15 @@ function render(){
       </td>
       <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(catDayAll,catCum):`
         <div class="pr-wrap" style="gap:2px">
-          ${mkPR('Заказы',  catFactOrd, catPlanOrd, v=>v||0)}
-          ${mkPR('Продажи', catFactSls, catPlanBuy, v=>v||0)}
-          ${mkPR('Выручка', catFactRev, catPlanRev, v=>Nf(v)+'₽')}
+          <div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${catFactOrd||0}</span></div>
+          <div class="pr-row"><span class="pr-lbl">Продажи</span><span class="pr-fact">${catFactSls||0}</span></div>
+          <div class="pr-row"><span class="pr-lbl">Выручка</span><span class="pr-fact">${Nf(catFactRev)}₽</span></div>
           ${catFactSls>0?`<div class="pr-row"><span class="pr-lbl">Ср. чек</span><span class="pr-fact">${Nf(catFactRev/catFactSls)}₽</span></div>`:''}
-          ${catNp!==null?`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${catNp>=0?'pv':'nv'}">${Nf(catNp)}₽</span>${catNpPct?`<span class="pr-pct" style="background:${catNp>=0?'var(--color-background-success,#e6f4ea)':'var(--color-background-error,#fce8e6)'};color:${catNp>=0?'var(--color-text-success,#137333)':'var(--color-text-error,#c5221f)'}">${catNpPct}%</span>`:''}${catPlanNp!==0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanNp)}₽</span>`:''}</div>`:''}
-          ${catFactSpend>0?`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(catFactSpend)}₽</span><span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catFactDrr}%</span>${catPlanDrr>0?`<span class="pr-sep">/</span><span class="pr-plan">${catPlanDrr.toFixed(1)}%</span>`:''}</div>`:''}
-          ${catComm>0?`<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(catComm)}₽</span>${catCommPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catCommPct}%</span>`:''}${catPlanComm>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanComm)}₽</span>`:''}</div>`:''}
+          ${catNp!==null?`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${catNp>=0?'pv':'nv'}">${Nf(catNp)}₽</span>${catNpPct?`<span class="pr-pct" style="background:${catNp>=0?'var(--color-background-success,#e6f4ea)':'var(--color-background-error,#fce8e6)'};color:${catNp>=0?'var(--color-text-success,#137333)':'var(--color-text-error,#c5221f)'}">${catNpPct}%</span>`:''}</div>`:''}
+          ${catFactSpend>0?`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(catFactSpend)}₽</span><span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catFactDrr}%</span></div>`:''}
+          ${catComm>0?`<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(catComm)}₽</span>${catCommPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catCommPct}%</span>`:''}</div>`:''}
           ${catAcq>0?`<div class="pr-row"><span class="pr-lbl">Эквайринг</span><span class="pr-fact">${Nf(catAcq)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catAcq/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
-          ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}${catPlanLogi>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanLogi)}₽</span>`:''}</div>`:''}
+          ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
         </div>`}
       </td>`;
     weekGroups.forEach((wg,wi)=>{
@@ -2010,8 +1866,17 @@ function render(){
         });
       }
 
-      // mkPR — вынесен на верхний уровень (см. рядом с fmtMetric), т.к. теперь
-      // используется и строкой категории (выше по коду), не только артикулом.
+      // ── Постоянная сводка факт/план (не зависит от выбранного метрика) ──
+      function mkPR(lbl, fact, plan, fmt) {
+        const f = fmt(fact);
+        if (!fact && !plan) return '';
+        const pct = plan > 0 ? Math.round(fact / plan * 100) : null;
+        const cls = pct === null ? '' : pct >= 100 ? 'pv' : pct >= 70 ? 'nw' : 'nv';
+        const planPart = plan
+          ? `<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span><span class="pr-pct ${cls}">${pct}%</span>`
+          : '';
+        return `<div class="pr-row"><span class="pr-lbl">${lbl}</span><span class="pr-fact">${f}</span>${planPart}</div>`;
+      }
       const prOrd = mkPR('Заказы',  factOrd, art.plan_ord, v => v||0);
       const prSls = mkPR('Продажи', factSls, art.plan_buy, v => v||0);
       const prRev = mkPR('Выручка', factRev, art.plan_rev, v=>Nf(v)+'₽');
@@ -2033,20 +1898,14 @@ function render(){
       const commPct = art.commission_pct > 0 ? art.commission_pct.toFixed(1) : (gross > 0 ? (comm / gross * 100).toFixed(1) : null);
       const acqPct  = gross > 0 ? (acq  / gross * 100).toFixed(1) : null;
       const logiPct = gross > 0 ? (logi / gross * 100).toFixed(1) : null;
-      // План по комиссии/логистике — из %% плана (art.plan_comm_pct/plan_logi_pct,
-      // 24.09.2026, требует migration_plan_pct_fields.sql) × план-выручка, та же
-      // логика, что у факта (comm/gross → %, тут наоборот %×revenue → ₽), чтобы
-      // сравнивать ₽ с ₽, а не смешивать % плана с ₽ факта.
-      const planComm = art.plan_rev>0 && art.plan_comm_pct>0 ? art.plan_rev*art.plan_comm_pct/100 : 0;
-      const planLogi = art.plan_rev>0 && art.plan_logi_pct>0 ? art.plan_rev*art.plan_logi_pct/100 : 0;
       const prComm = comm > 0
-        ? `<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(comm)}₽</span>${commPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${commPct}%</span>`:''}${planComm>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planComm)}₽</span>`:''}</div>`
+        ? `<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(comm)}₽</span>${commPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${commPct}%</span>`:''}</div>`
         : '';
       const prAcq = acq > 0
         ? `<div class="pr-row"><span class="pr-lbl">Эквайринг</span><span class="pr-fact">${Nf(acq)}₽</span>${acqPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${acqPct}%</span>`:''}</div>`
         : '';
       const prLogi = logi > 0
-        ? `<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(logi)}₽</span>${logiPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${logiPct}%</span>`:''}${planLogi>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planLogi)}₽</span>`:''}</div>`
+        ? `<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(logi)}₽</span>${logiPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${logiPct}%</span>`:''}</div>`
         : '';
 
       // ЧП = Выручка - С/С×Продажи - Реклама - Комиссия - Эквайринг - Логистика.
@@ -2058,15 +1917,7 @@ function render(){
         const np = factRev - art.cogs * factSls - factSpend - comm - acq - logi;
         const npPct = (np / factRev * 100).toFixed(1);
         const npCls = np >= 0 ? 'pv' : 'nv';
-        // План ЧП = план-выручка − план-себестоимость×план-продажи − план-реклама
-        // − план-комиссия − план-логистика (эквайринг в плане не задают — не
-        // собирается со стороны продавца отдельным полем, эквайринг ниоткуда
-        // не берём и в плане ЧП не вычитаем, как и Эквайринг не показан с планом выше).
-        const planNp = art.plan_rev>0
-          ? art.plan_rev - art.plan_vc*art.plan_buy - art.plan_spend - planComm - planLogi
-          : 0;
-        const planNpPart = planNp!==0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planNp)}₽</span>`:'';
-        prNp = `<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${Nf(np)}₽</span><span class="pr-pct ${npCls}" style="background:${np>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${np>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${npPct}%</span>${planNpPart}</div>`;
+        prNp = `<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${Nf(np)}₽</span><span class="pr-pct ${npCls}" style="background:${np>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${np>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${npPct}%</span></div>`;
       }
 
       const hasPrData = prOrd || prSls || prRev;
