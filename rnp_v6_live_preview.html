@@ -72,13 +72,6 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .sel{padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);font-size:11px;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans)}
 .kstrip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:1rem}
 #kpi-breakdown.hidden{display:none}
-/* ── Темп месяца: факт с начала месяца vs линейный план-темп на сегодня ──
-   Отдельный блок НАД .kstrip (тот — месячный итог, этот — "на сегодня").
-   Показывается только для текущего месяца — см. renderPaceStrip(). */
-.pacewrap{margin-bottom:8px}
-.pacehdr{font-size:10px;color:var(--color-text-tertiary);font-weight:500;margin-bottom:5px}
-.pacestrip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.pc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px;border:1px dashed var(--color-border-secondary)}
 .kc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px}
 .kl{font-size:10px;color:var(--color-text-tertiary);margin-bottom:1px}
 .kv{font-size:16px;font-weight:500;color:var(--color-text-primary);line-height:1.1}
@@ -154,7 +147,17 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .mline-wrap{display:flex;flex-direction:column;width:100%}
 .mline{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
 .mline-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
-.mline-fact{font-weight:500;color:var(--color-text-primary)}
+/* Факт/План/Откл. — 3 САМОСТОЯТЕЛЬНЫЕ выровненные колонки (не текст вподбор),
+   каждая своей фикс. ширины, чтобы числа строились строго друг под другом на
+   всех строках METRIC_ROWS — 24.09.2026, по явной просьбе пользователя (было
+   "факт / план 43.5%" одной строкой текста, не колонками). У строк без плана
+   (Возврат/Ср.чек/Эквайринг/Реклама и т.п.) план/откл. рендерятся как "—",
+   а не пропускаются — иначе колонки поедут между строками.
+   ВАЖНО: .mline-fact используется и в compactDayValuesHTML (ячейка дня, там
+   только факт, plan/dev туда не подставляются) — фикс. ширина ей не вредит.*/
+.mline-fact{font-weight:500;color:var(--color-text-primary);width:60px;flex-shrink:0;text-align:right}
+.mline-plan{color:var(--color-text-tertiary);font-size:9px;width:60px;flex-shrink:0;text-align:right}
+.mline-dev{font-size:9px;font-weight:500;width:56px;flex-shrink:0;text-align:right;padding:0 2px;border-radius:3px;box-sizing:border-box}
 /* Фон блока по группе метрик — визуально отделяет "Реклама" от "Итого (реклама+
    органика)" от базовых метрик и от "Склад", вместо одинаковых на вид строк подряд. */
 .mgroup{padding:1px 3px;margin:0 -3px;border-radius:3px}
@@ -163,10 +166,6 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .mgroup-total{background:rgba(29,158,117,.07)}
 .mgroup-stock{background:rgba(217,119,6,.07)}
 .mgroup-plan{background:rgba(0,91,255,.1)}
-/* "план X" рядом с фактом (см. staticLabelBlockHTML) — и отдельный "откл. ±X"
-   компактно в той же строке, без переноса (высота .mline фиксирована). */
-.mline-plan{color:var(--color-text-tertiary);font-size:9px}
-.mline-dev{font-size:9px;font-weight:500;padding:0 3px;border-radius:3px}
 .mline-dev.pv{color:var(--color-text-success);background:var(--color-background-success)}
 .mline-dev.nv{color:var(--color-text-danger);background:var(--color-background-danger)}
 .msep{min-height:14px;line-height:14px;font-size:7px;color:var(--color-text-tertiary);
@@ -330,7 +329,6 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   </div>
 </div>
 
-<div id="pacewrap"></div>
 <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
   <button class="sel" onclick="toggleKpiBreakdown()"
     style="cursor:pointer;font-size:11px"
@@ -1290,19 +1288,24 @@ function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
-    // План "по последнюю дату факта" + отклонение — только у метрик с planKey
-    // (см. METRIC_ROWS) и только когда план реально задан (не 0/null).
-    let planPart='';
+    // План "по последнюю дату факта" + отклонение — САМОСТОЯТЕЛЬНЫЕ колонки
+    // (см. .mline-plan/.mline-dev CSS), выводятся ВСЕГДА, даже "—", у метрик
+    // без плана — иначе колонки съезжают между строками. 24.09.2026: раньше
+    // было текстом "план X" внутри строки факта — по просьбе пользователя
+    // разбито на 3 независимые выровненные колонки с заголовком (см. render()).
+    let planStr='—', devStr='—', devCls='';
     if(planAgg&&m.planKey&&daysInMonth>0){
       const planTotal=m.planKey(planAgg);
       if(planTotal!==null&&planTotal!==undefined&&planTotal!==0){
         const planToDate=planTotal*(lastDataDay||0)/daysInMonth;
         const dev=(v||0)-planToDate;
-        const devCls=dev>=0?'pv':'nv';
-        planPart=`<span class="mline-plan" title="План на ${lastDataDay} дн. из ${daysInMonth}">план ${fmtMetric(planToDate,m.fmt)}</span>`+
-                  `<span class="mline-dev ${devCls}" title="Отклонение от плана">${dev>=0?'+':''}${fmtMetric(dev,m.fmt)}</span>`;
+        devCls=dev>=0?'pv':'nv';
+        planStr=fmtMetric(planToDate,m.fmt);
+        devStr=(dev>=0?'+':'')+fmtMetric(dev,m.fmt);
       }
     }
+    const planPart=`<span class="mline-plan" title="План на ${lastDataDay||0} дн. из ${daysInMonth}">${planStr}</span>`+
+                    `<span class="mline-dev ${devCls}" title="Отклонение от плана">${devStr}</span>`;
     out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}${planPart}</div>`;
   });
   out+='</div></div>';
@@ -1599,60 +1602,6 @@ function renderKPI(){
     </div>`;
   }).join('');
   renderKpiBreakdown();
-  renderPaceStrip();
-}
-
-// ─── Темп месяца: факт с начала месяца vs линейный план-темп на сегодня ───
-// Отдельно от .kstrip (тот — факт/план ЗА ВЕСЬ месяц, месячный итог, уже
-// работал сам по себе как только появились данные в monthly_plans). Этот
-// блок — "на сегодняшний день месяца мы должны быть на такой-то отметке,
-// если равномерно распределить план по дням" — по Заказам/Продажам, ту же
-// пару, что уже есть первыми двумя карточками kstrip (переиспользуем их
-// готовые d.kpi[...].v/.plan, не пересчитываем заново). Без "Выкуп %" —
-// это доля/процент, не накопительный счётчик, "темп" на неё не накладывается
-// так же осмысленно, и она и так уже есть в kstrip как "Выкупаемость"
-// (дублировать не нужно, подтверждено пользователем).
-function renderPaceStrip(){
-  const box=document.getElementById('pacewrap');
-  const d=DATA[CMP];
-  const today=new Date();
-  // Блок осмысленен только для ТЕКУЩЕГО месяца — на прошлых/будущих "план на
-  // сегодня внутри месяца" не значит ничего (месяц уже закрыт или ещё не начался).
-  const isCurrentMonth = d && CYEAR===today.getFullYear() && CMONTH===today.getMonth()+1;
-  if(!isCurrentMonth){ box.innerHTML=''; return; }
-
-  const dayOfMonth=today.getDate();
-  const daysInMonth=new Date(CYEAR,CMONTH,0).getDate();
-  const monthFrac=dayOfMonth/daysInMonth;
-
-  const kOrd=d.kpi.find(k=>k.l==='Заказы');
-  const kSls=d.kpi.find(k=>k.l==='Продажи');
-  const rows=[kOrd,kSls].filter(k=>k && k.plan!==null);
-  if(!rows.length){ box.innerHTML=''; return; }
-
-  const cards=rows.map(k=>{
-    const fact=parseFloat(k.v)||0;
-    const planTotal=parseFloat(k.plan)||0;
-    const paceTarget=planTotal*monthFrac;
-    const pct=paceTarget>0?Math.round(fact/paceTarget*100):null;
-    const cls=pct===null?'':pct>=95?'ok':pct>=80?'warn':'err';
-    const barColor=cls==='ok'?'var(--color-text-success)':cls==='warn'?'#d97706':'var(--color-text-danger)';
-    return `<div class="pc">
-      <div class="kl">${k.l} на сегодня</div>
-      <div class="kv">${k.v}</div>
-      <div class="krow" style="margin-top:3px">
-        <span class="kp">план&nbsp;${Math.round(paceTarget)}</span>
-        ${pct!==null?`<span class="bd ${cls}">${pct}%</span>`:''}
-      </div>
-      <div class="kpbar" style="margin-top:4px"><div class="kpfill"
-        style="width:${pct===null?0:Math.min(pct,100)}%;background:${barColor}"></div></div>
-    </div>`;
-  }).join('');
-
-  box.innerHTML=`<div class="pacewrap">
-    <div class="pacehdr">ТЕМП МЕСЯЦА — день ${dayOfMonth} из ${daysInMonth}</div>
-    <div class="pacestrip">${cards}</div>
-  </div>`;
 }
 
 // ─── Разворачиваемая детализация "Выкупаемость" по категориям/цветомоделям ────
@@ -1869,7 +1818,12 @@ function render(){
   let html=`<table class="main${CM==='all'?' all-mode':''}"><thead><tr>
     <th class="s0" rowspan="2"></th>
     <th class="s1" rowspan="2" style="text-align:left;padding-left:8px">Артикул</th>
-    <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">Факт&nbsp;/ план</th>`;
+    <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">${CM==='all'
+      ? `<div style="display:flex;gap:3px"><span style="width:64px"></span>
+          <span style="width:60px;text-align:right;flex-shrink:0">Факт</span>
+          <span style="width:60px;text-align:right;flex-shrink:0">План</span>
+          <span style="width:56px;text-align:right;flex-shrink:0">Откл.</span></div>`
+      : 'Факт&nbsp;/ план'}</th>`;
   weekGroups.forEach((wg,wi)=>{
     const collapsed=!!WEEK_COLLAPSED[wg.wk];
     const colspan=1+(collapsed?0:wg.days.length);
