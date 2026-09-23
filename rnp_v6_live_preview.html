@@ -1111,7 +1111,7 @@ function sparkSVG(vals,color,w=48,h=20){
 const METRIC_ROWS=[
   {key:'ord',      label:'Заказы',   fmt:'int', gk:'core', planKey:p=>p.ord},
   {key:'sls',      label:'Продажи',  fmt:'int', gk:'core', planKey:p=>p.buy},
-  {key:'buyoutPct',label:'Выкуп %',  fmt:'pct', gk:'core', planKey:p=>p.ord>0?p.buy/p.ord*100:null},
+  {key:'buyoutPct',label:'Выкуп %',  fmt:'pct', gk:'core', planKey:p=>p.ord>0?p.buy/p.ord*100:null, planIsRatio:true},
   {key:'rev',      label:'Выручка',  fmt:'money', gk:'core', planKey:p=>p.rev},
   {key:'ret',      label:'Возврат',  fmt:'money', pct:true, gk:'core'},
   {key:'avg',      label:'Ср. чек',  fmt:'money', gk:'core'},
@@ -1254,25 +1254,28 @@ function _mgOpen(gk){
   _mgPrevGk=gk;
   return out;
 }
-// Блок "План (в день)" — 3 строки (Заказы/Выкуп%/Продажи), равномерный
-// дневной темп (planAgg.ord/daysInMonth и т.п.), ОДИНАКОВЫЙ в s2 и в КАЖДОЙ
-// ячейке дня (это опорная линия для сравнения, не факт конкретного дня) —
-// 24.09.2026, по явной просьбе пользователя показать над строкой "Заказы"
-// и по цветомодели (строка артикула), и по категории, без лишнего клика.
-// withLabels — только в s2 (там же остальные подписи слева), в ячейке дня
-// подписей не бывает вообще (см. compactDayValuesHTML).
-function _planPaceBlockHTML(planAgg,daysInMonth,withLabels){
-  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0))return '';
-  const planOrdDay=daysInMonth>0?planAgg.ord/daysInMonth:0;
-  const planSlsDay=daysInMonth>0?planAgg.buy/daysInMonth:0;
-  const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
-  const lbl=t=>withLabels?`<span class="mline-lbl">${t}</span>`:'';
-  let out=_mgOpen('plan');
-  out+=`<div class="msep">План (в день)</div>`;
-  out+=`<div class="mline">${lbl('Заказы')}<span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span></div>`;
-  out+=`<div class="mline">${lbl('Выкуп %')}<span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span></div>`;
-  out+=`<div class="mline">${lbl('Продажи')}<span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span></div>`;
-  return out;
+// План/отклонение для ОДНОЙ метрики в ОДНОЙ ячейке (день / неделя-итого /
+// общий итог) — контекстное: cellDays = сколько дней "стоит" эта ячейка
+// (1 — колонка одного дня, N — колонка "Итого нед." той недели, lastDataDay —
+// накопительно по всем дням периода с фактом). 24.09.2026: раньше был
+// отдельный блок "План (в день)" с ОДНИМ и тем же дневным числом во всех
+// колонках без разбора — по просьбе пользователя убран, вместо него у самих
+// строк Заказы/Выкуп%/Продажи (и остальных с planKey) план теперь считается
+// под конкретную колонку: день → план на 1 день, неделя → план на дни этой
+// недели, общий итог → накопительно по факту (совпадает с тем, что уже было
+// в s2 раньше). planIsRatio (см. METRIC_ROWS — buyoutPct) — план НЕ
+// масштабируется по дням, это готовый % target, не сумма.
+function _planDevForMetric(m,v,planAgg,cellDays,daysInMonth){
+  if(!(planAgg&&m.planKey&&daysInMonth>0))return{planStr:'—',devStr:'—',devCls:''};
+  const planTotal=m.planKey(planAgg);
+  if(planTotal===null||planTotal===undefined||planTotal===0)return{planStr:'—',devStr:'—',devCls:''};
+  const planForPeriod=m.planIsRatio?planTotal:planTotal*(cellDays||0)/daysInMonth;
+  const dev=(v||0)-planForPeriod;
+  return{
+    planStr:fmtMetric(planForPeriod,m.fmt),
+    devStr:(dev>=0?'+':'')+fmtMetric(dev,m.fmt),
+    devCls:dev>=0?'pv':'nv',
+  };
 }
 // dayArr/cumO — факт (см. выше), planAgg — buildPlanAgg() по тем же артикулам,
 // lastDataDay/daysInMonth — для прорейтинга "план по последнюю дату факта"
@@ -1281,54 +1284,44 @@ function _planPaceBlockHTML(planAgg,daysInMonth,withLabels){
 function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
-  out+=_planPaceBlockHTML(planAgg,daysInMonth,true);
   METRIC_ROWS.forEach(m=>{
     const v=metricCumValue(dayArr,cumO,m);
     const pct=metricPct(cumO,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
-    // План "по последнюю дату факта" + отклонение — САМОСТОЯТЕЛЬНЫЕ колонки
-    // (см. .mline-plan/.mline-dev CSS), выводятся ВСЕГДА, даже "—", у метрик
-    // без плана — иначе колонки съезжают между строками. 24.09.2026: раньше
-    // было текстом "план X" внутри строки факта — по просьбе пользователя
-    // разбито на 3 независимые выровненные колонки с заголовком (см. render()).
-    let planStr='—', devStr='—', devCls='';
-    if(planAgg&&m.planKey&&daysInMonth>0){
-      const planTotal=m.planKey(planAgg);
-      if(planTotal!==null&&planTotal!==undefined&&planTotal!==0){
-        const planToDate=planTotal*(lastDataDay||0)/daysInMonth;
-        const dev=(v||0)-planToDate;
-        devCls=dev>=0?'pv':'nv';
-        planStr=fmtMetric(planToDate,m.fmt);
-        devStr=(dev>=0?'+':'')+fmtMetric(dev,m.fmt);
-      }
-    }
-    const planPart=`<span class="mline-plan" title="План на ${lastDataDay||0} дн. из ${daysInMonth}">${planStr}</span>`+
+    // План/отклонение — САМОСТОЯТЕЛЬНЫЕ колонки (см. .mline-plan/.mline-dev
+    // CSS), выводятся ВСЕГДА, даже "—", у метрик без плана — иначе колонки
+    // съезжают между строками.
+    const {planStr,devStr,devCls}=_planDevForMetric(m,v,planAgg,lastDataDay,daysInMonth);
+    const planPart=`<span class="mline-plan" title="План накопительно, ${lastDataDay||0} дн. из ${daysInMonth}">${planStr}</span>`+
                     `<span class="mline-dev ${devCls}" title="Отклонение от плана">${devStr}</span>`;
     out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}${planPart}</div>`;
   });
   out+='</div></div>';
   return out;
 }
-// Компактный набор чисел для ОДНОЙ ячейки-дня — тот же порядок метрик и те же
-// классы/высоты строк, что в staticLabelBlockHTML (см. коммент там), только без подписи —
-// подпись уже статично слева в s2, строка визуально дополняет её, а не повторяет.
+// Компактный набор чисел для ОДНОЙ ячейки (день ИЛИ "Итого нед.") — тот же
+// порядок метрик и те же классы/высоты строк, что в staticLabelBlockHTML (см.
+// коммент там), только без подписи слева — она уже статично в s2, строка
+// визуально дополняет её, а не повторяет. cellDays — 1 для колонки одного
+// дня, N (дней в неделе) для колонки "Итого нед." — см. _planDevForMetric.
 // o может быть null (артикул без единой проводки в этот рабочий день) — раньше тут
 // стоял ранний return'' (буквально пустая ячейка, без тире, выглядело как сбой
 // загрузки). metricVal(null,key)/metricPct(null,...) уже сами возвращают null,
 // а fmtMetric(null,...) уже возвращает '—' — просто не бейлимся раньше времени.
-function compactDayValuesHTML(o,planAgg,daysInMonth){
+function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
-  out+=_planPaceBlockHTML(planAgg,daysInMonth,false);
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?'<div class="msep">&nbsp;</div>':'';
-    out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+    const {planStr,devStr,devCls}=_planDevForMetric(m,v,planAgg,cellDays,daysInMonth);
+    const planPart=`<span class="mline-plan">${planStr}</span><span class="mline-dev ${devCls}">${devStr}</span>`;
+    out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}${planPart}</div>`;
   });
   out+='</div></div>';
   return out;
@@ -1990,14 +1983,14 @@ function render(){
       const wkDayList=wg.days.map(x=>x.day);
       const wkSepCls=wi>0?' wk-sep':'';
       if(CM==='all'){
-        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList),catPlanAgg,daysInMonth)}</td>`;
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList),catPlanAgg,wg.days.length,daysInMonth)}</td>`;
       }else{
         const wv=statValueForMetric(calcStats(arts,wkDayList),CM);
         html+=`<td class="cat-sub wk-total${wkSepCls}">${fmtV(wv,CM)}</td>`;
       }
       if(!collapsed)wg.days.forEach(({day,di})=>{
         if(CM==='all'){
-          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di],catPlanAgg,daysInMonth)}</td>`;
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di],catPlanAgg,1,daysInMonth)}</td>`;
         }else{
           const v=catDayTotals[di];
           html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':fmtV(v,CM)}</td>`;
@@ -2133,14 +2126,14 @@ function render(){
         const wkDayList=wg.days.map(x=>x.day);
         const wkSepCls=wi>0?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList),artPlanAgg,daysInMonth)}</td>`;
+          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList),artPlanAgg,wg.days.length,daysInMonth)}</td>`;
         }else{
           const wv=statValueForMetric(calcStats([art],wkDayList),CM);
           html+=`<td class="wk-total${wkSepCls}"><span class="dv">${fmtV(wv,CM)}</span></td>`;
         }
         if(!collapsed)wg.days.forEach(({day,di})=>{
           if(CM==='all'){
-            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di],artPlanAgg,daysInMonth)}</td>`;
+            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di],artPlanAgg,1,daysInMonth)}</td>`;
           }else{
             const v=getV(art,day,CM);
             html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
@@ -2169,14 +2162,14 @@ function render(){
     const wkDayList=wg.days.map(x=>x.day);
     const wkSepCls=wi>0?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList),totalPlanAgg,daysInMonth)}</td>`;
+      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList),totalPlanAgg,wg.days.length,daysInMonth)}</td>`;
     }else{
       const wv=statValueForMetric(calcStats(displayArts,wkDayList),CM);
       html+=`<td class="wk-total${wkSepCls}" style="text-align:center">${fmtV(wv,CM)}</td>`;
     }
     if(!collapsed)wg.days.forEach(({day,di})=>{
       if(CM==='all'){
-        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di],totalPlanAgg,daysInMonth)}</td>`;
+        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di],totalPlanAgg,1,daysInMonth)}</td>`;
       }else{
         html+=`<td class="${day.off?' off-day':''}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
       }
