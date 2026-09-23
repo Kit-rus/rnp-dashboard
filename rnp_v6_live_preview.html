@@ -869,6 +869,27 @@ function buildKPI(rows,mp){
   const artWithDrrPlan=rows.filter((r,i,a)=>a.findIndex(x=>x.seller_article===r.seller_article)===i&&parseFloat(r.plan_drr)>0).length;
   const avgPlanDrr = artWithDrrPlan>0 ? planDrr/artWithDrrPlan : 0;
 
+  // План ЧП и Логистика % — из %% плана (plan_commission_pct/plan_logistics_pct,
+  // migration_plan_pct_fields.sql) × план-выручка, та же формула, что уже у
+  // строки артикула/категории (см. mkPR-блок и catPlanComm/catPlanLogi выше).
+  // Дедуп по seller_article — план flat на весь месяц, повторяется на каждой
+  // дневной строке, иначе умножился бы на число дней. 25.09.2026, по прямой
+  // просьбе пользователя — раньше эти 2 карточки в kstrip всегда были "нет
+  // плана", хотя данные для расчёта уже есть.
+  const seen3=new Set();
+  let planComm=0, planLogi=0, planVcTotal=0;
+  for(const r of rows){
+    if(seen3.has(r.seller_article))continue;
+    seen3.add(r.seller_article);
+    const pr=parseFloat(r.plan_revenue)||0;
+    if(pr>0&&parseFloat(r.plan_commission_pct)>0)planComm+=pr*parseFloat(r.plan_commission_pct)/100;
+    if(pr>0&&parseFloat(r.plan_logistics_pct)>0)planLogi+=pr*parseFloat(r.plan_logistics_pct)/100;
+    planVcTotal+=(parseFloat(r.plan_variable_cost)||0)*(parseInt(r.plan_buyouts_qty)||0);
+  }
+  const planNp = planRev>0 ? planRev-planVcTotal-planSpend-planComm-planLogi : null;
+  const planNpPct = planNp!==null&&planRev>0 ? (planNp/planRev*100).toFixed(1) : null;
+  const planLogiPct = planRev>0 ? (planLogi/planRev*100) : 0;
+
   // Хелпер: % выполнения (null если плана нет)
   const pc=(fact,plan)=>plan>0?Math.round(fact/plan*100):null;
   // Абсолютное отклонение — только если есть план
@@ -883,9 +904,15 @@ function buildKPI(rows,mp){
      expand:{byCat:buyoutByCat, byModel:buyoutByModel}},
     {l:'Выручка',      v:Nf(revenue),              plan:planRev>0?Nf(planRev):null,            pct:pc(revenue,planRev),  dev:fdev(dev(revenue,planRev),v=>Nf(Math.abs(v))+(v<0?'':'')), inv:false},
     {l:'Себестоимость',v:cogs>0?Nf(cogs)+'₽':'—', plan:null,                                  pct:null,                 dev:null,                                                  inv:false},
-    {l:'ЧП',           v:np!==null?Nf(np)+'₽'+(npPct?' ('+npPct+'%)':''):'—', plan:null,      pct:null,                 dev:null,                                                  inv:false},
+    {l:'ЧП',           v:np!==null?Nf(np)+'₽'+(npPct?' ('+npPct+'%)':''):'—',
+     plan:planNp!==null?Nf(planNp)+'₽':null,
+     pct:(np!==null&&planNp>0)?Math.round(np/planNp*100):null,
+     dev:(np!==null&&planNp!==null&&planNp>0)?fdev(dev(np,planNp),v=>Nf(Math.abs(v))+'₽'):null, inv:false},
     {l:'ДРР %',        v:drr.toFixed(1)+'%',       plan:avgPlanDrr>0?avgPlanDrr.toFixed(1)+'%':null, pct:avgPlanDrr>0?Math.round(drr/avgPlanDrr*100):null, dev:avgPlanDrr>0?fdev(dev(drr,avgPlanDrr),v=>Math.abs(v).toFixed(1)+'%'):null, inv:true},
-    {l:'Логистика %',  v:logiPct.toFixed(1)+'%',   plan:null,                                  pct:null,                 dev:null,                                                  inv:true},
+    {l:'Логистика %',  v:logiPct.toFixed(1)+'%',
+     plan:planLogiPct>0?planLogiPct.toFixed(1)+'%':null,
+     pct:planLogiPct>0?Math.round(logiPct/planLogiPct*100):null,
+     dev:planLogiPct>0?fdev(dev(logiPct,planLogiPct),v=>Math.abs(v).toFixed(1)+'%'):null, inv:true},
   ];
 }
 
@@ -1316,16 +1343,24 @@ function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
   out+='</div></div>';
   return out;
 }
-// Короткая строка-ссылка "план на день" НАД Заказы — ТОЛЬКО для ячейки
-// одного дня (isSingleDay), не для "Итого нед." 25.09.2026, по фидбеку
-// пользователя: полная разбивка факт/план/откл. по ВСЕМ метрикам в узкой
-// ячейке одного дня — избыточно ("полная сводка не нужна"), нужен только
-// компактный ориентир по заказам в день, одной строкой сверху.
+// Компактный ориентир НАД Заказы — ТОЛЬКО для ячейки одного дня (isSingleDay),
+// не для "Итого нед." (там уже полная факт/план/откл. разбивка — см. ниже).
+// 25.09.2026: полная разбивка по ВСЕМ метрикам в узкой ячейке одного дня —
+// избыточно ("полная сводка не нужна"), но и одно голое число с текстом
+// "план" внутри строки — тоже неверно ("не пиши план", у нас уже была
+// нормальная визуализация). Возвращено: 3 строки (Заказы/Выкуп%/Продажи,
+// равномерный дневной темп), БЕЗ подписи "план" в каждой строке — понятно
+// по одному лишь синему фону блока (.mgroup-plan), тот же приём, что уже
+// на строке категории/артикула не текстом, а цветом отличает группы.
 function _dayPlanRefHTML(planAgg,daysInMonth){
-  if(!planAgg||!(planAgg.ord>0)||!(daysInMonth>0))return'';
+  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0)||!(daysInMonth>0))return'';
   const planOrdDay=planAgg.ord/daysInMonth;
+  const planSlsDay=planAgg.buy/daysInMonth;
+  const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
   let out=_mgOpen('plan');
-  out+=`<div class="mline f2"><span class="mline-fact" style="color:var(--color-text-tertiary);font-weight:400">план</span><span class="mline-badge">${fmtMetric(planOrdDay,'int')}</span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span><span class="mline-badge"></span></div>`;
   return out;
 }
 // Компактный набор чисел для ОДНОЙ ячейки. Два режима:
