@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Себестоимость проданного — ABELLO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#f4f4f5;--card:#fff;--border:#e4e4e7;--border2:#f0f0f2;
+  --text:#18181b;--text2:#52525b;--text3:#a1a1aa;
+  --accent:#2563eb;--accent-h:#1d4ed8;
+  --ok:#16a34a;--ok-bg:rgba(22,163,74,.08);
+  --err:#dc2626;--err-bg:rgba(220,38,38,.08);
+  --r:8px;--r2:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+
+/* ── Login ── */
+#loginOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;z-index:999}
+#loginBox{background:var(--card);border-radius:12px;padding:36px 44px;width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:14px}
+#loginBox h2{font-size:17px;font-weight:600;text-align:center}
+#loginBox p{font-size:11px;color:var(--text3);text-align:center;margin-top:-6px}
+#loginBox input{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:var(--r);font-size:14px;outline:none;transition:border-color .15s}
+#loginBox input:focus{border-color:var(--accent)}
+#loginBox button{width:100%;padding:10px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer}
+#loginBox button:hover{background:var(--accent-h)}
+#loginErr{color:var(--err);font-size:11px;text-align:center;min-height:14px}
+
+/* ── App ── */
+#app{display:none;max-width:1300px;margin:0 auto;padding:20px 16px}
+
+.pg-hdr{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.pg-hdr h1{font-size:17px;font-weight:600}
+.pg-hdr-links{display:flex;gap:6px;align-items:center}
+.pg-hdr a,.pg-hdr button.linklike{font-size:11px;color:var(--text3);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);transition:all .15s;cursor:pointer;font-family:var(--font)}
+.pg-hdr a:hover,.pg-hdr button.linklike:hover{color:var(--text);border-color:var(--text2)}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.cf{display:flex;flex-direction:column;gap:4px}
+.cf label{font-size:10px;color:var(--text3);font-weight:500}
+.cf input[type=date]{padding:7px 9px;border:1px solid var(--border);
+  border-radius:var(--r2);font-size:12px;outline:none;font-family:var(--font)}
+.cf input:focus{border-color:var(--accent)}
+.go-btn{padding:8px 20px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.go-btn:hover{background:var(--accent-h)}
+.go-btn:disabled{opacity:.5;cursor:not-allowed}
+.ctrl-sep{flex:1}
+.csv-btn{padding:8px 14px;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--card);font-size:12px;cursor:pointer;color:var(--text2);
+  font-family:var(--font);transition:all .15s;white-space:nowrap;font-weight:500}
+.csv-btn:hover{border-color:var(--ok);color:var(--ok)}
+.csv-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Summary strip ── */
+.sum-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
+.sl{font-size:9px;color:var(--text3);font-weight:500;margin-bottom:2px;text-transform:uppercase}
+.sv{font-size:16px;font-weight:600;color:var(--text);line-height:1.2}
+@media(max-width:700px){.sum-strip{grid-template-columns:1fr}}
+
+/* ── Table ── */
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.tbl-scroll{overflow-x:auto;max-height:70vh}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:10px;font-weight:500;color:var(--text3);padding:8px 10px;
+  border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;
+  background:var(--bg);position:sticky;top:0;z-index:1}
+th.r{text-align:right}
+td{padding:7px 10px;border-bottom:1px solid var(--border2);vertical-align:middle}
+td.r{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.art-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3}
+.mid{font-size:10px;color:var(--text3);font-family:monospace}
+.cost-total{font-weight:600;color:var(--text)}
+tr.total-row td{font-weight:600;border-top:1.5px solid var(--border);background:var(--bg)}
+.empty-msg{text-align:center;padding:48px;color:var(--text3);font-size:13px}
+.note{font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>ABELLO · Бухгалтерия</h2>
+    <p>Себестоимость проданного — войдите чтобы продолжить</p>
+    <input type="email" id="emailInp" placeholder="Email" autocomplete="email">
+    <input type="password" id="pwdInp" placeholder="Пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Войти</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="pg-hdr">
+    <h1>📋 Себестоимость проданного</h1>
+    <div class="pg-hdr-links">
+      <button class="linklike" onclick="doLogout()">Выйти</button>
+    </div>
+  </div>
+
+  <div class="ctrl-row">
+    <div class="cf">
+      <label>Платформа</label>
+      <select id="mpSel" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--r2);font-size:12px;font-family:var(--font)">
+        <option value="all">Все</option>
+        <option value="wb">WB</option>
+        <option value="ozon">OZON</option>
+      </select>
+    </div>
+    <div class="cf">
+      <label>Дата с</label>
+      <input type="date" id="dateFrom">
+    </div>
+    <div class="cf">
+      <label>Дата по</label>
+      <input type="date" id="dateTo">
+    </div>
+    <button class="go-btn" id="goBtn" onclick="loadReport()">Показать</button>
+    <div class="ctrl-sep"></div>
+    <button class="csv-btn" id="exportBtn" onclick="exportExcel()" disabled>⬇ Выгрузить в Excel</button>
+  </div>
+
+  <div class="sum-strip">
+    <div class="sc"><div class="sl">Артикулов продано</div><div class="sv" id="sumArts">—</div></div>
+    <div class="sc"><div class="sl">Кол-во проданных единиц</div><div class="sv" id="sumQty">—</div></div>
+    <div class="sc"><div class="sl">Себестоимость проданного</div><div class="sv" id="sumCost">—</div></div>
+  </div>
+
+  <div class="tbl-wrap">
+    <div class="tbl-scroll">
+      <table id="reportTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Артикул платформы</th>
+            <th>Артикул продавца</th>
+            <th>Наименование артикула</th>
+            <th>Категория</th>
+            <th class="r">Кол-во проданных единиц</th>
+            <th class="r">Себестоимость ед.</th>
+            <th class="r">Себестоимость</th>
+          </tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+      <div class="empty-msg" id="emptyMsg">Выберите период и нажмите «Показать»</div>
+    </div>
+  </div>
+  <div class="note">
+    Кол-во проданных единиц = Продажа − Возврат (financial_transactions) за выбранный период.
+    Себестоимость считается помесячно (article_costs по каждому месяцу, попавшему в период) и суммируется —
+    «Себестоимость ед.» в таблице показывает средневзвешенную по факту продаж внутри периода.
+    Если для какого-то месяца в периоде себестоимость не задана — эта часть продаж считается с себестоимостью 0₽
+    (не пропускается молча).
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── Config ──────────────────────────────────────────────────────
+// Анонимный ключ + настоящий Supabase Auth логин (правило проекта — никогда
+// service_role в клиентском JS). Доступ к этой странице контролируется НЕ
+// через RLS (articles/financial_transactions/article_costs уже открыты на
+// чтение любому authenticated — так исторически сделано для всего дашборда),
+// а через то, что логин/пароль от этого конкретного Supabase Auth аккаунта
+// знает только бухгалтерия — та же модель, что и у остальных страниц
+// (cost_editor.html и т.д.). Если нужен реальный контроль на уровне БД —
+// это отдельная задача (роли/claims), не делалась.
+const SB_URL = 'https://lxmewaxdkjvpkoaoghxp.supabase.co';
+const SB_ANON = 'sb_publishable_Txyv_RuL8aR6OIACwPH1Hg_bKmqu6FA';
+const { createClient } = supabase;
+const sb = createClient(SB_URL, SB_ANON);
+let CURRENT_SESSION = null;
+function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
+
+let REPORT_ROWS = []; // готовые строки отчёта, для рендера и экспорта
+
+async function doLogin() {
+  const email = document.getElementById('emailInp').value.trim();
+  const pass  = document.getElementById('pwdInp').value;
+  document.getElementById('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) document.getElementById('loginErr').textContent = error.message;
+}
+async function doLogout(){ await sb.auth.signOut(); }
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    CURRENT_SESSION = session;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } else {
+    CURRENT_SESSION = null;
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+// ── Data fetch (постранично — PostgREST режет ответ до 1000 строк) ────
+async function fetchAll(path) {
+  const pageSize = 1000;
+  let all = [], offset = 0;
+  while (true) {
+    const sep = path.includes('?') ? '&' : '?';
+    const url = `${SB_URL}/rest/v1/${path}${sep}limit=${pageSize}&offset=${offset}`;
+    const r = await fetch(url, { headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` } });
+    if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
+    const batch = await r.json();
+    all = all.concat(batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all;
+}
+
+function monthStart(dateStr) { return dateStr.slice(0, 7) + '-01'; }
+
+async function loadReport() {
+  const mp = document.getElementById('mpSel').value;
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  const goBtn = document.getElementById('goBtn');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const table = document.getElementById('reportTable');
+
+  if (!dateFrom || !dateTo) {
+    alert('Укажите обе даты периода');
+    return;
+  }
+  if (dateFrom > dateTo) {
+    alert('«Дата с» позже «Дата по»');
+    return;
+  }
+
+  goBtn.disabled = true;
+  goBtn.textContent = 'Загружаю…';
+  table.style.display = 'none';
+  emptyMsg.style.display = 'block';
+  emptyMsg.textContent = 'Загрузка…';
+
+  try {
+    // 1. Продажи/возвраты за период
+    let ftPath = `financial_transactions?select=article_id,date,transaction_type,quantity`
+      + `&transaction_type=in.(%22Продажа%22,%22Возврат%22)`
+      + `&date=gte.${dateFrom}&date=lte.${dateTo}`;
+    const txns = await fetchAll(ftPath);
+
+    // 2. Группируем по (article_id, месяц) — qty нетто (Продажа − Возврат)
+    const byArtMonth = new Map(); // "articleId|month" -> qty
+    const artIds = new Set();
+    for (const t of txns) {
+      if (!t.article_id) continue;
+      const month = monthStart(t.date);
+      const key = `${t.article_id}|${month}`;
+      const sign = t.transaction_type === 'Возврат' ? -1 : 1;
+      byArtMonth.set(key, (byArtMonth.get(key) || 0) + sign * (t.quantity || 0));
+      artIds.add(t.article_id);
+    }
+
+    if (artIds.size === 0) {
+      REPORT_ROWS = [];
+      renderTable();
+      return;
+    }
+
+    // 3. Справочник артикулов (только нужные id, постранично по in.())
+    const idList = [...artIds];
+    let articles = [];
+    for (let i = 0; i < idList.length; i += 200) {
+      const chunk = idList.slice(i, i + 200);
+      const rows = await fetchAll(`articles?select=id,marketplace,marketplace_id,seller_article,name,category&id=in.(${chunk.join(',')})`);
+      articles = articles.concat(rows);
+    }
+    const artById = new Map(articles.map(a => [a.id, a]));
+
+    // 4. Себестоимость по месяцам для этих артикулов
+    let costs = [];
+    for (let i = 0; i < idList.length; i += 200) {
+      const chunk = idList.slice(i, i + 200);
+      const rows = await fetchAll(`article_costs?select=article_id,month,cogs&article_id=in.(${chunk.join(',')})`);
+      costs = costs.concat(rows);
+    }
+    const costByArtMonth = new Map(costs.map(c => [`${c.article_id}|${c.month}`, parseFloat(c.cogs) || 0]));
+
+    // 5. Собираем строки отчёта: сумма qty и cost по всем месяцам на артикул
+    const perArt = new Map(); // article_id -> {qty, cost}
+    for (const [key, qty] of byArtMonth) {
+      const [artIdStr, month] = key.split('|');
+      const artId = parseInt(artIdStr);
+      if (qty === 0) continue;
+      const cogs = costByArtMonth.get(key) || 0;
+      const cur = perArt.get(artId) || { qty: 0, cost: 0 };
+      cur.qty += qty;
+      cur.cost += qty * cogs;
+      perArt.set(artId, cur);
+    }
+
+    let rows = [];
+    for (const [artId, agg] of perArt) {
+      if (agg.qty <= 0) continue; // только реально проданное (нетто > 0)
+      const a = artById.get(artId);
+      if (!a) continue;
+      if (mp !== 'all' && a.marketplace !== mp) continue;
+      rows.push({
+        marketplace_id: a.marketplace_id || '',
+        seller_article: a.seller_article || '',
+        name: a.name || '',
+        category: a.category || '',
+        qty: agg.qty,
+        unitCost: agg.qty > 0 ? agg.cost / agg.qty : 0,
+        totalCost: agg.cost,
+      });
+    }
+    rows.sort((x, y) => (x.category || '').localeCompare(y.category || '') || x.seller_article.localeCompare(y.seller_article));
+
+    REPORT_ROWS = rows;
+    renderTable();
+  } catch (e) {
+    console.error(e);
+    emptyMsg.textContent = `Ошибка загрузки: ${e.message}`;
+    emptyMsg.style.display = 'block';
+    table.style.display = 'none';
+  } finally {
+    goBtn.disabled = false;
+    goBtn.textContent = 'Показать';
+  }
+}
+
+function Nf(v) { return Math.round(v).toLocaleString('ru-RU'); }
+
+function renderTable() {
+  const table = document.getElementById('reportTable');
+  const body = document.getElementById('reportBody');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const exportBtn = document.getElementById('exportBtn');
+
+  if (!REPORT_ROWS.length) {
+    table.style.display = 'none';
+    emptyMsg.textContent = 'За выбранный период и платформу продаж не найдено';
+    emptyMsg.style.display = 'block';
+    exportBtn.disabled = true;
+    document.getElementById('sumArts').textContent = '—';
+    document.getElementById('sumQty').textContent = '—';
+    document.getElementById('sumCost').textContent = '—';
+    return;
+  }
+
+  let totalQty = 0, totalCost = 0;
+  body.innerHTML = REPORT_ROWS.map(r => {
+    totalQty += r.qty;
+    totalCost += r.totalCost;
+    return `<tr>
+      <td class="mid">${esc(r.marketplace_id)}</td>
+      <td>${esc(r.seller_article)}</td>
+      <td class="art-name">${esc(r.name)}</td>
+      <td>${esc(r.category)}</td>
+      <td class="r">${Nf(r.qty)}</td>
+      <td class="r">${Nf(r.unitCost)}₽</td>
+      <td class="r cost-total">${Nf(r.totalCost)}₽</td>
+    </tr>`;
+  }).join('') + `<tr class="total-row">
+      <td colspan="4">Итого, ${REPORT_ROWS.length} арт.</td>
+      <td class="r">${Nf(totalQty)}</td>
+      <td class="r">—</td>
+      <td class="r">${Nf(totalCost)}₽</td>
+    </tr>`;
+
+  table.style.display = 'table';
+  emptyMsg.style.display = 'none';
+  exportBtn.disabled = false;
+  document.getElementById('sumArts').textContent = REPORT_ROWS.length;
+  document.getElementById('sumQty').textContent = Nf(totalQty);
+  document.getElementById('sumCost').textContent = Nf(totalCost) + '₽';
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function exportExcel() {
+  if (!REPORT_ROWS.length) return;
+  const data = REPORT_ROWS.map(r => ({
+    'Артикул платформы': r.marketplace_id,
+    'Артикул продавца': r.seller_article,
+    'Наименование артикула': r.name,
+    'Категория': r.category,
+    'Кол-во проданных единиц': r.qty,
+    'Себестоимость ед.': Math.round(r.unitCost * 100) / 100,
+    'Себестоимость': Math.round(r.totalCost * 100) / 100,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Себестоимость');
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  XLSX.writeFile(wb, `Себестоимость_проданного_${dateFrom}_${dateTo}.xlsx`);
+}
+
+// Дефолтный период — текущий месяц
+(function initDates(){
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('dateFrom').value = `${first.getFullYear()}-${pad(first.getMonth()+1)}-${pad(first.getDate())}`;
+  document.getElementById('dateTo').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+})();
+</script>
+</body>
+</html>
