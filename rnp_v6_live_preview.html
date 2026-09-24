@@ -1286,6 +1286,23 @@ function metricCumValue(dayArr,cumO,m){
   }
   return metricVal(cumO,m.key);
 }
+// Индикатор выполнения плана по Продажам (накопительно на последнюю дату факта,
+// та же база cumO/planAgg/cellDays, что у строки "Продажи" в s2 — число тут
+// ВСЕГДА совпадает с % там). ≥100% — зелёный, отставание ≤10% (90-99%) —
+// жёлтый, отставание >10% (<90%) — красный. Нет плана на Продажи — пусто
+// (не рисуем индикатор). 24.09.2026, по просьбе пользователя, только у артикулов.
+function planCompletionDotHTML(dayArr,cumO,planAgg,cellDays,daysInMonth){
+  if(!(planAgg&&daysInMonth>0))return'';
+  const slsRow=METRIC_ROWS.find(m=>m.key==='sls');
+  const planTotal=slsRow.planKey(planAgg);
+  if(!(planTotal>0))return'';
+  const planForPeriod=planTotal*(cellDays||0)/daysInMonth;
+  if(!(planForPeriod>0))return'';
+  const fact=metricCumValue(dayArr,cumO,slsRow)||0;
+  const pct=fact/planForPeriod*100;
+  const color=pct>=100?'var(--color-text-success, #137333)':pct>=90?'var(--color-text-warning, #b7791f)':'var(--color-text-danger, #c5221f)';
+  return`<span title="Выполнение плана по продажам: ${pct.toFixed(0)}%" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0"></span>`;
+}
 // Полный подписанный блок — идёт в s2 (справа от фото/названия/комментария) в режиме "Все".
 // ВАЖНО: строки тут (.mrow/.msep) — те же классы с ЖЁСТКО зафиксированной высотой, что
 // использует compactDayValuesHTML() ниже, специально НЕ переиспользуем .pr-row/.pr-wrap
@@ -2198,7 +2215,7 @@ function render(){
       const artKey=art.name.replace(/'/g,"\\'");
       html+=`<tr class="art-row" data-cat="${catId}" style="${isCollapsed?'display:none':''}">
         <td class="s0">${photoCell}</td>
-        <td class="s1"><div style="display:flex;align-items:center;gap:3px"><span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
+        <td class="s1"><div style="display:flex;align-items:center;gap:3px">${planCompletionDotHTML(artDayGated,artCum,artPlanAgg,periodDays,daysInMonth)}<span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
           ${commentFieldHTML(art.name,artKey,MP_DB[CMP]||CMP)}</td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
       weekGroups.forEach((wg,wi)=>{
