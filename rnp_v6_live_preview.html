@@ -213,6 +213,16 @@ tr.art-row td.wk-total{font-weight:600}
 th.wk-total-hdr{font-size:9px;color:var(--color-text-tertiary)}
 tr.total-row td{font-weight:500;border-top:1.5px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:11px}
 tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-background-secondary)}
+/* tr.art-row уже переопределяет vertical-align:top для s0/s1/s2 (строка 117),
+   а tr.total-row/tr.cat-row — нет, там оставался браузерный дефолт (middle).
+   Пока в дневной ячейке (.all-cell, vertical-align:top) не было доп. строк
+   плана сверху, разница была незаметна (высоты совпадали); как только там
+   появились 3 строки плана и строка выросла — контент s2 в total/cat-row
+   всплывал по центру увеличенной строки, а day-cell оставался прижат к
+   верху — 24px лишнего сдвига поверх ожидаемой "ступеньки" в 3 строки.
+   24.09.2026.*/
+tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2,
+tr.cat-row td.s0,tr.cat-row td.s1,tr.cat-row td.s2{vertical-align:top}
 .pv{color:var(--color-text-success)}.nv{color:var(--color-text-danger)}
 @media(max-width:800px){.kstrip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:500px){.kstrip{grid-template-columns:repeat(2,1fr)}}
@@ -1379,32 +1389,42 @@ function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
 // равномерный дневной темп), БЕЗ подписи "план" в каждой строке — понятно
 // по одному лишь синему фону блока (.mgroup-plan), тот же приём, что уже
 // на строке категории/артикула не текстом, а цветом отличает группы.
-// Дневной план-ориентир для Заказы/Продажи/Выкуп % — раньше рисовался ОТДЕЛЬНЫМ
-// блоком над/поверх этих строк (сначала сдвигал всё вниз, потом — как
-// непрозрачный оверлей поверх факта). Оба варианта пользователь забраковал:
-// "планы не должны были сместить строки вниз... ты должен был в недели и дни
-// встроить план выше имеющейся информации" — что при непрозрачном оверлее
-// делало факт нечитаемым (скрывал его целиком), 24.09.2026. Настоящий фикс:
-// НЕ отдельный блок вообще — план-темп на день просто ЗАНИМАЕТ ГОТОВЫЙ слот
-// бейджа в ТОЙ ЖЕ строке (у .mline.f2 и так 2 колонки: факт + бейдж, бейдж
-// пустует у этих 3 метрик, т.к. у них нет pct:true). Высота/позиция строки
-// не меняется НИКАК — то же самое место в гриде, что и всегда, факт остаётся
-// виден полностью, план — рядом с ним, а не над/под. Гарантированно не может
-// разъехаться с s2/"Итого нед." просто по построению (тот же METRIC_ROWS.forEach,
-// без единой лишней строки).
-function _dayPlanBadgeHTML(m,planAgg,daysInMonth){
-  if(!planAgg||!(daysInMonth>0))return'<span class="mline-badge"></span>';
-  let val=null;
-  if(m.key==='ord')val=planAgg.ord>0?planAgg.ord/daysInMonth:null;
-  else if(m.key==='sls')val=planAgg.buy>0?planAgg.buy/daysInMonth:null;
-  else if(m.key==='buyoutPct')val=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
-  if(val===null)return'<span class="mline-badge"></span>';
-  return`<span class="mline-badge"><span class="pr-pct" title="План на день" style="background:rgba(0,91,255,.12);color:rgb(0,91,255)">${fmtMetric(val,m.fmt)}</span></span>`;
+// Дневной план-ориентир для Заказы/Продажи/Выкуп % — финальная версия,
+// 24.09.2026, по прямому эскизу пользователя (фото от руки): план — ТРИ ПОЛНОЦЕННЫЕ
+// строки СВЕРХУ, тем же размером/строкой .mline.f2, что и все остальные метрики
+// (а не мелкий текст и не оверлей) — они СДВИГАЮТ вниз "старые" строки дня
+// (Заказы...Остатки), и это НАМЕРЕННО ("у тебя должна быть ступенька" — цитата).
+// Условие пользователя ОДНО: "старые данные не должны смещаться ОТНОСИТЕЛЬНО
+// ДРУГ ДРУГА" — т.е. внутри самой колонки дня порядок/интервалы между Заказы
+// →Продажи→...→Остатки остаются как были, просто весь блок целиком едет вниз
+// на высоту этих 3 строк (даёт "ступеньку" при сравнении с s2/"Итого нед." —
+// это ожидаемо и разрешено, не баг). Отдельно: в бейдж-слоте самих строк
+// Заказы/Продажи/Выкуп % (той же, что раньше) теперь не план, а ОТКЛОНЕНИЕ
+// факта от плана-на-день — переиспользуем _planDevForMetric с cellDays=1,
+// та же формула/раскраска, что уже даёт "Итого нед."/s2.
+function _dayPlanRowsHTML(planAgg,daysInMonth){
+  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0)||!(daysInMonth>0))return'';
+  const planOrdDay=planAgg.ord/daysInMonth;
+  const planSlsDay=planAgg.buy/daysInMonth;
+  const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
+  let out=_mgOpen('plan');
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
+  return out;
+}
+function _devBadgeHTML(m,v,planAgg,daysInMonth){
+  const{devStr,devCls}=_planDevForMetric(m,v,planAgg,1,daysInMonth);
+  if(devStr==='—')return'<span class="mline-badge"></span>';
+  const bg=devCls==='pv'?'var(--color-background-success)':'var(--color-background-danger)';
+  const col=devCls==='pv'?'var(--color-text-success)':'var(--color-text-danger)';
+  return`<span class="mline-badge"><span class="pr-pct" title="Отклонение от плана на день" style="background:${bg};color:${col}">${devStr}</span></span>`;
 }
 // Компактный набор чисел для ОДНОЙ ячейки. Два режима:
-//  - isSingleDay=true (ячейка ОДНОГО дня) — факт+бейдж (2 колонки, .mline.f2);
-//    у Заказы/Продажи/Выкуп % бейдж занят план-темпом на день (см.
-//    _dayPlanBadgeHTML выше), у остальных метрик — обычный %-бейдж.
+//  - isSingleDay=true (ячейка ОДНОГО дня) — сверху 3 строки плана (см.
+//    _dayPlanRowsHTML), затем факт+бейдж (2 колонки, .mline.f2) по всем
+//    метрикам; у Заказы/Продажи/Выкуп % бейдж — отклонение от плана-на-день
+//    (см. _devBadgeHTML), у остальных метрик — обычный %-бейдж.
 //  - isSingleDay=false ("Итого нед.") — полный факт/бейдж/план/откл. (4
 //    колонки), та же логика, что в staticLabelBlockHTML, без подписи слева
 //    (она уже статично в s2, эта ячейка визуально дополняет её).
@@ -1416,7 +1436,8 @@ function _dayPlanBadgeHTML(m,planAgg,daysInMonth){
 function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth,isSingleDay){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
-  const dayPaceKeys=isSingleDay?new Set(['ord','sls','buyoutPct']):null;
+  if(isSingleDay)out+=_dayPlanRowsHTML(planAgg,daysInMonth);
+  const devKeys=isSingleDay?new Set(['ord','sls','buyoutPct']):null;
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
@@ -1424,7 +1445,7 @@ function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth,isSingleDay){
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?'<div class="msep">&nbsp;</div>':'';
     if(isSingleDay){
-      const badge=dayPaceKeys.has(m.key)?_dayPlanBadgeHTML(m,planAgg,daysInMonth):pctBadgeHTML(pct,v,m);
+      const badge=devKeys.has(m.key)?_devBadgeHTML(m,v,planAgg,daysInMonth):pctBadgeHTML(pct,v,m);
       out+=`<div class="mline f2"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${badge}</div>`;
     }else{
       const {planStr,devStr,devCls}=_planDevForMetric(m,v,planAgg,cellDays,daysInMonth);
