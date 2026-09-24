@@ -568,9 +568,24 @@ function commentFieldHTML(sellerArticle,artKey,mp){
   const cur=COMMENTS[sellerArticle];
   const text=cur?cur.comment:'';
   const mpKey=mp.replace(/'/g,"\\'");
-  return `<textarea class="art-comment-input" rows="10" placeholder="+ комментарий"
-    onclick="event.stopPropagation()"
-    onblur="saveComment(this,'${artKey}','${mpKey}')">${escapeHtml(text)}</textarea>`;
+  // Очистка через пустое поле уже технически работала и раньше (saveComment
+  // при пустом trim() шлёт DELETE) — кнопка просто делает это явным действием,
+  // по прямой просьбе пользователя, а не полагается на "стереть текст и
+  // кликнуть мимо". 24.09.2026.
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    <textarea class="art-comment-input" rows="10" placeholder="+ комментарий"
+      onclick="event.stopPropagation()"
+      onblur="saveComment(this,'${artKey}','${mpKey}')">${escapeHtml(text)}</textarea>
+    <button type="button" style="align-self:flex-start;font-size:9px;padding:1px 6px;
+      border:0.5px solid var(--color-border-secondary);border-radius:4px;background:transparent;
+      color:var(--color-text-tertiary);cursor:pointer;font-family:var(--font-sans)"
+      onclick="event.stopPropagation();clearComment(this,'${artKey}','${mpKey}')">Очистить</button>
+  </div>`;
+}
+function clearComment(btn,sellerArticle,mp){
+  const textarea=btn.previousElementSibling;
+  textarea.value='';
+  saveComment(textarea,sellerArticle,mp);
 }
 
 async function saveComment(textarea,sellerArticle,mp){
