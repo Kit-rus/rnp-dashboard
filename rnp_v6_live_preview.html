@@ -1384,10 +1384,27 @@ function _dayPlanRefHTML(planAgg,daysInMonth){
   const planOrdDay=planAgg.ord/daysInMonth;
   const planSlsDay=planAgg.buy/daysInMonth;
   const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
-  let out=_mgOpen('plan');
+  // Раньше это были обычные строки ПЕРЕД METRIC_ROWS — сдвигали весь список
+  // метрик вниз ровно на высоту этого блока, из-за чего строки дня переставали
+  // совпадать по высоте со строками s2/"Итого нед." (см. скриншот пользователя
+  // с красной стрелкой, 24.09.2026: "выровняй строки... пофиг что план будет
+  // чуть выше"). Фикс: блок больше не занимает место в потоке — абсолютным
+  // позиционированием кладём его ПОВЕРХ первых строк (Заказы/Выкуп %/Продажи),
+  // они могут визуально перекрыться — по явному ОК пользователя это допустимо,
+  // выравнивание строк важнее. Сам себя закрывает (не полагается на следующий
+  // _mgOpen()), т.к. должен остаться самостоятельным HTML-блоком.
+  // Непрозрачный фон обязателен: это абсолютный оверлей поверх строк
+  // Заказы/Выкуп %/Продажи в обычном потоке — при прозрачном .mgroup-plan
+  // (rgba(0,91,255,.1)) текст факта под низом и текст плана сверху рисуются
+  // в одних координатах и превращаются в нечитаемую кашу из цифр (найдено на
+  // скриншоте пользователя, 24.09.2026). in-line фон перекрывает inline-стилем
+  // прозрачный из .mgroup-plan (выше по specificity, класс остаётся ради
+  // остальных стилей группы).
+  let out='<div class="mgroup mgroup-plan" style="position:absolute;top:0;left:0;right:0;z-index:1;background:var(--color-background-primary,#fff)">';
   out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span><span class="mline-badge"></span></div>`;
   out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
   out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+='</div>';
   return out;
 }
 // Компактный набор чисел для ОДНОЙ ячейки. Два режима:
@@ -1403,9 +1420,9 @@ function _dayPlanRefHTML(planAgg,daysInMonth){
 // загрузки). metricVal(null,key)/metricPct(null,...) уже сами возвращают null,
 // а fmtMetric(null,...) уже возвращает '—' — просто не бейлимся раньше времени.
 function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth,isSingleDay){
-  let out='<div class="mline-wrap">';
+  let out='<div class="mline-wrap" style="position:relative">';
   _mgPrevGk=null;
-  if(isSingleDay)out+=_dayPlanRefHTML(planAgg,daysInMonth);
+  if(isSingleDay){out+=_dayPlanRefHTML(planAgg,daysInMonth);_mgPrevGk=null;}
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
