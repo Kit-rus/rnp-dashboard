@@ -199,8 +199,25 @@ async function doLogin() {
 }
 async function doLogout(){ await sb.auth.signOut(); }
 
+// Доступ по роли (app_metadata.role, назначается через execution/manage_user_role.py
+// — service_role Admin API, роль пишется на сервере, подделать её из браузера
+// нельзя). Пускаем: 'accounting' (для этой страницы), 'admin', и нет роли вообще
+// (те же старые аккаунты без роли — тот же принцип, что уже в rnp_v6_live.html:
+// "нет роли = admin", чтобы не отрезать существующий доступ задним числом).
+// Всё остальное ('viewer' и любая другая роль) — не про эту страницу, разлогиниваем.
+const ALLOWED_ROLES = new Set(['accounting', 'admin']);
+function roleAllowed(session){
+  const role = session?.user?.app_metadata?.role;
+  return !role || ALLOWED_ROLES.has(role);
+}
+
 sb.auth.onAuthStateChange(async (event, session) => {
   if (session) {
+    if (!roleAllowed(session)) {
+      document.getElementById('loginErr').textContent = 'У вашей роли нет доступа к этой странице.';
+      await sb.auth.signOut();
+      return;
+    }
     CURRENT_SESSION = session;
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('app').style.display = 'block';
