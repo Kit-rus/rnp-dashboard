@@ -1356,6 +1356,21 @@ function _planDevForMetric(m,v,planAgg,cellDays,daysInMonth){
     devCls:dev>=0?'pv':'nv',
   };
 }
+// Пустой 3-строчный отступ сверху — держит "Заказы" (и всё ниже) на ОДНОЙ
+// горизонтальной линии ВО ВСЕХ колонках сразу (s2 / "Итого нед." / дни), даже
+// там, где эти 3 строки нечем заполнить. У дневных ячеек та же высота занята
+// РЕАЛЬНЫМ планом (_dayPlanRowsHTML) — важно, чтобы класс строки (has-lbl /
+// обычная / f2) совпадал с тем, что использует остальной блок этой же колонки,
+// иначе высота 16px может разойтись на суб-пиксель. 24.09.2026, прямая
+// формулировка пользователя: "строку Заказы... опускаешь на три строки вниз"
+// одинаково по ВСЕМ столбцам, не только по дням.
+function _topSpacerRowsHTML(lineCls){
+  let out=_mgOpen('plan');
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  return out;
+}
 // dayArr/cumO — факт (см. выше), planAgg — buildPlanAgg() по тем же артикулам,
 // lastDataDay/daysInMonth — для прорейтинга "план по последнюю дату факта"
 // (не весь месяц, а план × lastDataDay/daysInMonth — 24.09.2026, по просьбе
@@ -1363,6 +1378,7 @@ function _planDevForMetric(m,v,planAgg,cellDays,daysInMonth){
 function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
+  out+=_topSpacerRowsHTML('has-lbl');
   METRIC_ROWS.forEach(m=>{
     const v=metricCumValue(dayArr,cumO,m);
     const pct=metricPct(cumO,m.key,m);
@@ -1402,8 +1418,12 @@ function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
 // Заказы/Продажи/Выкуп % (той же, что раньше) теперь не план, а ОТКЛОНЕНИЕ
 // факта от плана-на-день — переиспользуем _planDevForMetric с cellDays=1,
 // та же формула/раскраска, что уже даёт "Итого нед."/s2.
+// ВСЕГДА 3 строки, даже без плана (тогда просто пустые "—") — иначе для
+// артикула без плана тут будет 0 строк, а в s2/"Итого нед." (через
+// _topSpacerRowsHTML) — всегда 3, и "Заказы" опять разъедется на конкретно
+// этом артикуле. Отступ должен быть безусловным.
 function _dayPlanRowsHTML(planAgg,daysInMonth){
-  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0)||!(daysInMonth>0))return'';
+  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0)||!(daysInMonth>0))return _topSpacerRowsHTML('f2');
   const planOrdDay=planAgg.ord/daysInMonth;
   const planSlsDay=planAgg.buy/daysInMonth;
   const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
@@ -1436,7 +1456,7 @@ function _devBadgeHTML(m,v,planAgg,daysInMonth){
 function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth,isSingleDay){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
-  if(isSingleDay)out+=_dayPlanRowsHTML(planAgg,daysInMonth);
+  out+=isSingleDay?_dayPlanRowsHTML(planAgg,daysInMonth):_topSpacerRowsHTML('');
   const devKeys=isSingleDay?new Set(['ord','sls','buyoutPct']):null;
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
