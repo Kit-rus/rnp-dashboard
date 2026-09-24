@@ -1400,10 +1400,17 @@ function _dayPlanRefHTML(planAgg,daysInMonth){
   // скриншоте пользователя, 24.09.2026). in-line фон перекрывает inline-стилем
   // прозрачный из .mgroup-plan (выше по specificity, класс остаётся ради
   // остальных стилей группы).
+  // Порядок строк ДОЛЖЕН совпадать с METRIC_ROWS (Заказы/Продажи/Выкуп %) —
+  // раньше был Заказы/Выкуп%/Продажи, из-за чего оверлей по ВЫСОТЕ уже
+  // совпадал со строками (см. предыдущий фикс), но контент внутри был не на
+  // своей строке ("23.6%" против подписи "Продажи", "3" против "Выкуп %") —
+  // выглядело как "ничего не изменилось", хотя строки-то были ровные, просто
+  // с неправильными числами внутри. Найдено по скриншоту пользователя,
+  // 24.09.2026.
   let out='<div class="mgroup mgroup-plan" style="position:absolute;top:0;left:0;right:0;z-index:1;background:var(--color-background-primary,#fff)">';
   out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span><span class="mline-badge"></span></div>`;
-  out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
   out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
   out+='</div>';
   return out;
 }
