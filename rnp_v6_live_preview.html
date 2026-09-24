@@ -93,7 +93,14 @@ table.main{border-collapse:collapse;width:100%;font-size:11px}
 table.main th.s0,table.main td.s0{position:sticky;left:0;z-index:3;background:var(--color-background-primary);min-width:64px;max-width:64px;width:64px}
 table.main th.s1,table.main td.s1{position:sticky;left:64px;z-index:3;background:var(--color-background-primary);min-width:220px;max-width:220px;width:220px}
 table.main th.s2,table.main td.s2{position:sticky;left:284px;z-index:3;background:var(--color-background-primary);min-width:148px}
-table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:500;padding:5px 6px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center;white-space:nowrap;background:var(--color-background-primary);top:0}
+table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:500;padding:5px 6px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center;white-space:nowrap;background:var(--color-background-primary)}
+/* thead th.s0/s1/s2 получали ЗАОДНО и top:0 от общего правила выше (у них уже
+   position:sticky для горизонтального left-стика) — только у этих трёх столбцов
+   шапка залипала ещё и по вертикали, а "Нед."/дни (position:static, top:0 без
+   эффекта) — нет. На скролле страницы шапка рвалась ровно на стыке между
+   ними — видимая "ступенька". Полноценный вертикальный sticky не просили,
+   просто убираем top отдельно для этих трёх, оставляя левый sticky как есть. */
+table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{top:auto}
 table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{z-index:4;text-align:left}
 table.main thead th.plan-col{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
 table.main thead th.day-hdr{min-width:34px}
@@ -613,9 +620,12 @@ function isArticleVisible(art){
     const ly=rule.last_visible_year, lm=rule.last_visible_month;
     if(CYEAR>ly||(CYEAR===ly&&CMONTH>lm)) return false;
   }
-  // 2. Авто-скрытие: нет заказов за весь просматриваемый месяц
+  // 2. Авто-скрытие: нет заказов за весь просматриваемый месяц И нет плана —
+  // если план стоит (даже при 0 факте — это и есть сигнал "не продаём то,
+  // что запланировали"), артикул всё равно должен быть виден. 24.09.2026.
   const totalOrd=Object.values(art.days).reduce((s,d)=>s+(d.ord||0),0);
-  if(totalOrd===0) return false;
+  const hasPlan=(art.plan_ord||0)>0||(art.plan_buy||0)>0||(art.plan_rev||0)>0;
+  if(totalOrd===0&&!hasPlan) return false;
   return true;
 }
 
