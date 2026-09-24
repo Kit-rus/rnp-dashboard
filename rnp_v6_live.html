@@ -93,7 +93,14 @@ table.main{border-collapse:collapse;width:100%;font-size:11px}
 table.main th.s0,table.main td.s0{position:sticky;left:0;z-index:3;background:var(--color-background-primary);min-width:64px;max-width:64px;width:64px}
 table.main th.s1,table.main td.s1{position:sticky;left:64px;z-index:3;background:var(--color-background-primary);min-width:220px;max-width:220px;width:220px}
 table.main th.s2,table.main td.s2{position:sticky;left:284px;z-index:3;background:var(--color-background-primary);min-width:148px}
-table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:500;padding:5px 6px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center;white-space:nowrap;background:var(--color-background-primary);top:0}
+table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:500;padding:5px 6px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center;white-space:nowrap;background:var(--color-background-primary)}
+/* thead th.s0/s1/s2 получали ЗАОДНО и top:0 от общего правила выше (у них уже
+   position:sticky для горизонтального left-стика) — только у этих трёх столбцов
+   шапка залипала ещё и по вертикали, а "Нед."/дни (position:static, top:0 без
+   эффекта) — нет. На скролле страницы шапка рвалась ровно на стыке между
+   ними — видимая "ступенька". Полноценный вертикальный sticky не просили,
+   просто убираем top отдельно для этих трёх, оставляя левый sticky как есть. */
+table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{top:auto}
 table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{z-index:4;text-align:left}
 table.main thead th.plan-col{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
 table.main thead th.day-hdr{min-width:34px}
@@ -145,9 +152,31 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
    баг, найден через getComputedStyle — .mrow-fact наследовал overflow:auto от чужого
    правила). */
 .mline-wrap{display:flex;flex-direction:column;width:100%}
-.mline{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
-.mline-lbl{color:var(--color-text-tertiary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
-.mline-fact{font-weight:500;color:var(--color-text-primary)}
+/* CSS GRID, не flex — 25.09.2026: на flex план/откл. "плясали" между строками
+   (нашли по фидбеку пользователя), т.к. %%-бейдж (см. pctBadgeHTML) есть
+   ТОЛЬКО у части строк (ДРР/Комиссия/Эквайринг/Логистика/ЧП/Возврат) и его
+   переменная ширина сдвигала всё, что после него, вправо — у строк БЕЗ
+   бейджа план/откл. вставали на другое место. Grid с фикс. колонками решает
+   это раз и навсегда: бейдж — своя колонка, пустая у строк без него, но
+   МЕСТО зарезервировано всегда. .mline (ячейка дня/недели, 4 колонки, без
+   подписи) и .mline.has-lbl (s2, 5 колонок, с подписью слева) — разные
+   шаблоны, т.к. в дне/неделе подписи нет вообще (см. compactDayValuesHTML).*/
+.mline{display:grid;grid-template-columns:60px 34px 60px 56px;align-items:center;column-gap:3px;white-space:nowrap;min-height:16px;font-size:10px;line-height:16px}
+.mline.has-lbl{grid-template-columns:64px 60px 34px 60px 56px}
+.mline.f2{grid-template-columns:60px 34px}
+.mline-lbl{color:var(--color-text-tertiary);overflow:hidden;text-overflow:ellipsis}
+/* Факт/Бейдж/План/Откл. — САМОСТОЯТЕЛЬНЫЕ выровненные колонки (не текст
+   вподбор) — 24.09.2026, по явной просьбе пользователя (было "факт / план
+   43.5%" одной строкой текста). У строк без плана (Возврат/Ср.чек/Эквайринг/
+   Реклама и т.п.) план/откл. рендерятся как "—", а не пропускаются.
+   ВАЖНО: .mline-fact используется и в compactDayValuesHTML (ячейка дня —
+   там всего 2 колонки, .mline.f2, план/откл. туда не подставляются вообще,
+   см. коммент у функции — по просьбе пользователя убрана "полная сводка"
+   по всем метрикам в узкой ячейке одного дня, там только факт+бейдж).*/
+.mline-fact{font-weight:500;color:var(--color-text-primary);text-align:right}
+.mline-badge{text-align:right;overflow:hidden}
+.mline-plan{color:var(--color-text-tertiary);font-size:9px;text-align:right}
+.mline-dev{font-size:9px;font-weight:500;text-align:right;padding:0 2px;border-radius:3px;box-sizing:border-box}
 /* Фон блока по группе метрик — визуально отделяет "Реклама" от "Итого (реклама+
    органика)" от базовых метрик и от "Склад", вместо одинаковых на вид строк подряд. */
 .mgroup{padding:1px 3px;margin:0 -3px;border-radius:3px}
@@ -155,6 +184,9 @@ table.main tr.art-row td.s0,table.main tr.art-row td.s1,table.main tr.art-row td
 .mgroup-ads{background:rgba(0,91,255,.06)}
 .mgroup-total{background:rgba(29,158,117,.07)}
 .mgroup-stock{background:rgba(217,119,6,.07)}
+.mgroup-plan{background:rgba(0,91,255,.1)}
+.mline-dev.pv{color:var(--color-text-success);background:var(--color-background-success)}
+.mline-dev.nv{color:var(--color-text-danger);background:var(--color-background-danger)}
 .msep{min-height:14px;line-height:14px;font-size:7px;color:var(--color-text-tertiary);
   text-transform:uppercase;letter-spacing:.02em;border-top:1px dashed var(--color-border-tertiary);
   box-sizing:border-box;white-space:nowrap}
@@ -181,6 +213,16 @@ tr.art-row td.wk-total{font-weight:600}
 th.wk-total-hdr{font-size:9px;color:var(--color-text-tertiary)}
 tr.total-row td{font-weight:500;border-top:1.5px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:11px}
 tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2{background:var(--color-background-secondary)}
+/* tr.art-row уже переопределяет vertical-align:top для s0/s1/s2 (строка 117),
+   а tr.total-row/tr.cat-row — нет, там оставался браузерный дефолт (middle).
+   Пока в дневной ячейке (.all-cell, vertical-align:top) не было доп. строк
+   плана сверху, разница была незаметна (высоты совпадали); как только там
+   появились 3 строки плана и строка выросла — контент s2 в total/cat-row
+   всплывал по центру увеличенной строки, а day-cell оставался прижат к
+   верху — 24px лишнего сдвига поверх ожидаемой "ступеньки" в 3 строки.
+   24.09.2026.*/
+tr.total-row td.s0,tr.total-row td.s1,tr.total-row td.s2,
+tr.cat-row td.s0,tr.cat-row td.s1,tr.cat-row td.s2{vertical-align:top}
 .pv{color:var(--color-text-success)}.nv{color:var(--color-text-danger)}
 @media(max-width:800px){.kstrip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:500px){.kstrip{grid-template-columns:repeat(2,1fr)}}
@@ -316,6 +358,13 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   </div>
 </div>
 
+<div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+  <button class="sel" onclick="toggleKpiBreakdown()"
+    style="cursor:pointer;font-size:11px"
+    title="Заказы/Продажи/Выручка — факт и план по категориям и цветомоделям">
+    План кол-во ▾
+  </button>
+</div>
 <div class="kstrip" id="kstrip"></div>
 <div id="kpi-breakdown" class="hidden"></div>
 
@@ -581,9 +630,12 @@ function isArticleVisible(art){
     const ly=rule.last_visible_year, lm=rule.last_visible_month;
     if(CYEAR>ly||(CYEAR===ly&&CMONTH>lm)) return false;
   }
-  // 2. Авто-скрытие: нет заказов за весь просматриваемый месяц
+  // 2. Авто-скрытие: нет заказов за весь просматриваемый месяц И нет плана —
+  // если план стоит (даже при 0 факте — это и есть сигнал "не продаём то,
+  // что запланировали"), артикул всё равно должен быть виден. 24.09.2026.
   const totalOrd=Object.values(art.days).reduce((s,d)=>s+(d.ord||0),0);
-  if(totalOrd===0) return false;
+  const hasPlan=(art.plan_ord||0)>0||(art.plan_buy||0)>0||(art.plan_rev||0)>0;
+  if(totalOrd===0&&!hasPlan) return false;
   return true;
 }
 
@@ -664,6 +716,11 @@ function buildArticles(rows){
       plan_spend:parseFloat(r.plan_spend)||0,
       plan_vc:parseFloat(r.plan_variable_cost)||0,
       plan_fc:parseFloat(r.plan_fixed_cost)||0,
+      // %, 0-100 — требует migration_plan_pct_fields.sql (добавляет эти 3 поля
+      // во вьюху v_daily_dashboard); до применения миграции будут просто 0/undefined.
+      plan_comm_pct:parseFloat(r.plan_commission_pct)||0,
+      plan_logi_pct:parseFloat(r.plan_logistics_pct)||0,
+      plan_stor_pct:parseFloat(r.plan_storage_pct)||0,
       commission_sum:parseFloat(r.commission_sum)||0,
       commission_pct:parseFloat(r.commission_pct)||0,
       acquiring_sum:parseFloat(r.acquiring_sum)||0,
@@ -767,18 +824,39 @@ function buildKPI(rows,mp){
   // артикулу, что totalLogi выше — logistics_sum уже месячный, не дневной).
   const logiPct = revenue>0 ? (totalLogi*npRatio)/revenue*100 : 0;
 
-  // Выкупаемость по категориям и цветомоделям — детализация под карточкой
-  // "Выкупаемость" (та же формула buyQty/ordQty, что и общий итог выше, но по группам).
+  // Выкупаемость + план по категориям и цветомоделям — детализация под
+  // карточкой "Выкупаемость" (та же формула buyQty/ordQty для факта, что и
+  // общий итог выше, но по группам). 24.09.2026: добавлен план (Заказы/
+  // Продажи/Выручка) — раньше в этой разбивке был только факт, план видели
+  // только на общем итоге по кабинету или на отдельном артикуле, не по
+  // категории/цветомодели, хотя именно так аналитику и хотели смотреть.
+  // Факт суммируем по ВСЕМ строкам группы (каждая строка — день, сумма по
+  // дням = факт за период). План — flat-значение, повторяется на КАЖДОЙ
+  // дневной строке одного артикула, поэтому считаем его отдельным проходом
+  // с dedup по seller_article (иначе план умножился бы на число дней).
   const groupBuyout = keyFn => {
     const g = {};
     for (const r of rows) {
       const k = keyFn(r) || '(без категории)';
-      if (!g[k]) g[k] = {ord:0, buy:0};
+      if (!g[k]) g[k] = {ord:0, buy:0, rev:0};
       g[k].ord += parseInt(r.orders_qty)||0;
       g[k].buy += parseInt(r.confirmed_qty)||0;
+      g[k].rev += parseFloat(r.confirmed_sum)||0;
+    }
+    const seenPlan = new Set();
+    for (const r of rows) {
+      if (seenPlan.has(r.seller_article)) continue;
+      seenPlan.add(r.seller_article);
+      const k = keyFn(r) || '(без категории)';
+      if (!g[k]) continue; // группа без единой фактической строки — план ей тоже не покажем
+      g[k].planOrd = (g[k].planOrd||0) + (parseInt(r.plan_orders_qty)||0);
+      g[k].planBuy = (g[k].planBuy||0) + (parseInt(r.plan_buyouts_qty)||0);
+      g[k].planRev = (g[k].planRev||0) + (parseFloat(r.plan_revenue)||0);
     }
     return Object.entries(g)
-      .map(([name,v])=>({name, ord:v.ord, buy:v.buy, pct: v.ord>0 ? v.buy/v.ord*100 : 0}))
+      .map(([name,v])=>({name, ord:v.ord, buy:v.buy, rev:v.rev,
+        pct: v.ord>0 ? v.buy/v.ord*100 : 0,
+        planOrd:v.planOrd||0, planBuy:v.planBuy||0, planRev:v.planRev||0}))
       .filter(x=>x.ord>0||x.buy>0)
       .sort((a,b)=>b.ord-a.ord);
   };
@@ -811,6 +889,27 @@ function buildKPI(rows,mp){
   const artWithDrrPlan=rows.filter((r,i,a)=>a.findIndex(x=>x.seller_article===r.seller_article)===i&&parseFloat(r.plan_drr)>0).length;
   const avgPlanDrr = artWithDrrPlan>0 ? planDrr/artWithDrrPlan : 0;
 
+  // План ЧП и Логистика % — из %% плана (plan_commission_pct/plan_logistics_pct,
+  // migration_plan_pct_fields.sql) × план-выручка, та же формула, что уже у
+  // строки артикула/категории (см. mkPR-блок и catPlanComm/catPlanLogi выше).
+  // Дедуп по seller_article — план flat на весь месяц, повторяется на каждой
+  // дневной строке, иначе умножился бы на число дней. 25.09.2026, по прямой
+  // просьбе пользователя — раньше эти 2 карточки в kstrip всегда были "нет
+  // плана", хотя данные для расчёта уже есть.
+  const seen3=new Set();
+  let planComm=0, planLogi=0, planVcTotal=0;
+  for(const r of rows){
+    if(seen3.has(r.seller_article))continue;
+    seen3.add(r.seller_article);
+    const pr=parseFloat(r.plan_revenue)||0;
+    if(pr>0&&parseFloat(r.plan_commission_pct)>0)planComm+=pr*parseFloat(r.plan_commission_pct)/100;
+    if(pr>0&&parseFloat(r.plan_logistics_pct)>0)planLogi+=pr*parseFloat(r.plan_logistics_pct)/100;
+    planVcTotal+=(parseFloat(r.plan_variable_cost)||0)*(parseInt(r.plan_buyouts_qty)||0);
+  }
+  const planNp = planRev>0 ? planRev-planVcTotal-planSpend-planComm-planLogi : null;
+  const planNpPct = planNp!==null&&planRev>0 ? (planNp/planRev*100).toFixed(1) : null;
+  const planLogiPct = planRev>0 ? (planLogi/planRev*100) : 0;
+
   // Хелпер: % выполнения (null если плана нет)
   const pc=(fact,plan)=>plan>0?Math.round(fact/plan*100):null;
   // Абсолютное отклонение — только если есть план
@@ -825,9 +924,15 @@ function buildKPI(rows,mp){
      expand:{byCat:buyoutByCat, byModel:buyoutByModel}},
     {l:'Выручка',      v:Nf(revenue),              plan:planRev>0?Nf(planRev):null,            pct:pc(revenue,planRev),  dev:fdev(dev(revenue,planRev),v=>Nf(Math.abs(v))+(v<0?'':'')), inv:false},
     {l:'Себестоимость',v:cogs>0?Nf(cogs)+'₽':'—', plan:null,                                  pct:null,                 dev:null,                                                  inv:false},
-    {l:'ЧП',           v:np!==null?Nf(np)+'₽'+(npPct?' ('+npPct+'%)':''):'—', plan:null,      pct:null,                 dev:null,                                                  inv:false},
+    {l:'ЧП',           v:np!==null?Nf(np)+'₽'+(npPct?' ('+npPct+'%)':''):'—',
+     plan:planNp!==null?Nf(planNp)+'₽':null,
+     pct:(np!==null&&planNp>0)?Math.round(np/planNp*100):null,
+     dev:(np!==null&&planNp!==null&&planNp>0)?fdev(dev(np,planNp),v=>Nf(Math.abs(v))+'₽'):null, inv:false},
     {l:'ДРР %',        v:drr.toFixed(1)+'%',       plan:avgPlanDrr>0?avgPlanDrr.toFixed(1)+'%':null, pct:avgPlanDrr>0?Math.round(drr/avgPlanDrr*100):null, dev:avgPlanDrr>0?fdev(dev(drr,avgPlanDrr),v=>Math.abs(v).toFixed(1)+'%'):null, inv:true},
-    {l:'Логистика %',  v:logiPct.toFixed(1)+'%',   plan:null,                                  pct:null,                 dev:null,                                                  inv:true},
+    {l:'Логистика %',  v:logiPct.toFixed(1)+'%',
+     plan:planLogiPct>0?planLogiPct.toFixed(1)+'%':null,
+     pct:planLogiPct>0?Math.round(logiPct/planLogiPct*100):null,
+     dev:planLogiPct>0?fdev(dev(logiPct,planLogiPct),v=>Math.abs(v).toFixed(1)+'%'):null, inv:true},
   ];
 }
 
@@ -1058,18 +1163,22 @@ function sparkSVG(vals,color,w=48,h=20){
 // колонка s1), накопительный итог — там же (s2), а в колонках дней — голое число.
 // gk — короткий ключ группы, нужен только для фонового цвета блока (см. .mgroup-* CSS
 // ниже) — отдельно от grp (текст заголовка-разделителя, показывается один раз на группу).
+// planKey(p) — p это агрегат плана {ord,buy,rev,spend,comm,logi,np} (см.
+// buildPlanAgg()) — возвращает ПОЛНЫЙ МЕСЯЧНЫЙ план для этой метрики, откуда
+// staticLabelBlockHTML прорейтивает "план на сегодня" сам (см. lastDataDay/
+// daysInMonth там). Только у метрик, где план реально есть — 24.09.2026.
 const METRIC_ROWS=[
-  {key:'ord',      label:'Заказы',   fmt:'int', gk:'core'},
-  {key:'sls',      label:'Продажи',  fmt:'int', gk:'core'},
-  {key:'buyoutPct',label:'Выкуп %',  fmt:'pct', gk:'core'},
-  {key:'rev',      label:'Выручка',  fmt:'money', gk:'core'},
+  {key:'ord',      label:'Заказы',   fmt:'int', gk:'core', planKey:p=>p.ord},
+  {key:'sls',      label:'Продажи',  fmt:'int', gk:'core', planKey:p=>p.buy},
+  {key:'buyoutPct',label:'Выкуп %',  fmt:'pct', gk:'core', planKey:p=>p.ord>0?p.buy/p.ord*100:null, planIsRatio:true},
+  {key:'rev',      label:'Выручка',  fmt:'money', gk:'core', planKey:p=>p.rev},
   {key:'ret',      label:'Возврат',  fmt:'money', pct:true, gk:'core'},
   {key:'avg',      label:'Ср. чек',  fmt:'money', gk:'core'},
-  {key:'np',       label:'ЧП',       fmt:'money', pct:true, pctSign:true, gk:'core'},
-  {key:'spend',    label:'ДРР',      fmt:'money', pct:true, gk:'core'},
-  {key:'comm',     label:'Комиссия', fmt:'money', pct:true, gk:'core'},
+  {key:'np',       label:'ЧП',       fmt:'money', pct:true, pctSign:true, gk:'core', planKey:p=>p.np},
+  {key:'spend',    label:'ДРР',      fmt:'money', pct:true, gk:'core', planKey:p=>p.spend},
+  {key:'comm',     label:'Комиссия', fmt:'money', pct:true, gk:'core', planKey:p=>p.comm},
   {key:'acq',      label:'Эквайринг',fmt:'money', pct:true, gk:'core'},
-  {key:'logi',     label:'Логистика',fmt:'money', pct:true, gk:'core'},
+  {key:'logi',     label:'Логистика',fmt:'money', pct:true, gk:'core', planKey:p=>p.logi},
   {key:'adShows',  label:'Показы',   fmt:'k', grp:'Реклама', gk:'ads'},
   {key:'adClicks', label:'Клики',    fmt:'int', gk:'ads'},
   {key:'adCart',   label:'Корзина',  fmt:'int', gk:'ads'},
@@ -1110,6 +1219,42 @@ function fmtMetric(v,fmt){
   if(fmt==='pct')return v.toFixed(1)+'%';
   return Nf(v);
 }
+
+// Агрегат плана по списку артикулов — единая функция для строки артикула
+// (передать [art]), категории (arts) и общего итога (displayArts). Комиссия/
+// логистика/ЧП считаются из %% плана (art.plan_comm_pct/plan_logi_pct,
+// migration_plan_pct_fields.sql) × план-выручка — та же формула, что уже
+// в mkPR-блоке артикула/категории (см. planComm/catPlanComm), продублирована
+// сюда, т.к. нужна ещё и для METRIC_ROWS-блока (staticLabelBlockHTML/
+// compactDayValuesHTML), у которого свой, отдельный путь рендера. 24.09.2026.
+function buildPlanAgg(artsList){
+  const p={ord:0,buy:0,rev:0,spend:0,comm:0,logi:0,vcTotal:0};
+  for(const a of artsList){
+    p.ord+=a.plan_ord||0;
+    p.buy+=a.plan_buy||0;
+    p.rev+=a.plan_rev||0;
+    p.spend+=a.plan_spend||0;
+    if(a.plan_rev>0&&a.plan_comm_pct>0)p.comm+=a.plan_rev*a.plan_comm_pct/100;
+    if(a.plan_rev>0&&a.plan_logi_pct>0)p.logi+=a.plan_rev*a.plan_logi_pct/100;
+    p.vcTotal+=(a.plan_vc||0)*(a.plan_buy||0);
+  }
+  p.np = p.rev>0 ? p.rev - p.vcTotal - p.spend - p.comm - p.logi : null;
+  return p;
+}
+
+// Строка "факт / план [%]" для колонки s2 (plan-col) — общая для строки
+// артикула И строки категории (24.09.2026: раньше жила только внутри
+// per-артикульного цикла, категориям план вообще не показывался).
+function mkPR(lbl, fact, plan, fmt) {
+  const f = fmt(fact);
+  if (!fact && !plan) return '';
+  const pct = plan > 0 ? Math.round(fact / plan * 100) : null;
+  const cls = pct === null ? '' : pct >= 100 ? 'pv' : pct >= 70 ? 'nw' : 'nv';
+  const planPart = plan
+    ? `<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span><span class="pr-pct ${cls}">${pct}%</span>`
+    : '';
+  return `<div class="pr-row"><span class="pr-lbl">${lbl}</span><span class="pr-fact">${f}</span>${planPart}</div>`;
+}
 // % от выручки (той же базы, что раньше использовал dayAllHTML: ftrev дня, а если его
 // нет — mrev, месячная выручка артикула, как fallback — см. коммент у gateDay в v6_live).
 function metricPct(o,key,fmtDef){
@@ -1120,13 +1265,16 @@ function metricPct(o,key,fmtDef){
   if(!(base>0))return null;
   return Math.abs(v)/base*100;
 }
+// Всегда оборачиваем в .mline-badge (даже пустую) — своя grid-колонка (см.
+// .mline CSS), иначе у строк без бейджа план/откл. сдвигались бы влево
+// относительно строк с бейджем (нашли по фидбеку пользователя 25.09.2026).
 function pctBadgeHTML(pct,v,fmtDef){
-  if(pct===null)return'';
+  if(pct===null)return'<span class="mline-badge"></span>';
   const bad=fmtDef.pctSign?v<0:false;
   const style=fmtDef.pctSign
     ?`background:${bad?'var(--color-background-danger)':'var(--color-background-success)'};color:${bad?'var(--color-text-danger)':'var(--color-text-success)'}`
     :`background:var(--color-background-warning);color:var(--color-text-warning)`;
-  return`<span class="pr-pct" style="${style}">${pct.toFixed(1)}%</span>`;
+  return`<span class="mline-badge"><span class="pr-pct" style="${style}">${pct.toFixed(1)}%</span></span>`;
 }
 // Правка после реального фидбека: НЕ отдельные строки-метрики под артикулом (это было
 // дублированием — та же информация уже в статичном блоке s2, просто ещё раз ниже).
@@ -1148,6 +1296,23 @@ function metricCumValue(dayArr,cumO,m){
   }
   return metricVal(cumO,m.key);
 }
+// Индикатор выполнения плана по Продажам (накопительно на последнюю дату факта,
+// та же база cumO/planAgg/cellDays, что у строки "Продажи" в s2 — число тут
+// ВСЕГДА совпадает с % там). ≥100% — зелёный, отставание ≤10% (90-99%) —
+// жёлтый, отставание >10% (<90%) — красный. Нет плана на Продажи — пусто
+// (не рисуем индикатор). 24.09.2026, по просьбе пользователя, только у артикулов.
+function planCompletionDotHTML(dayArr,cumO,planAgg,cellDays,daysInMonth){
+  if(!(planAgg&&daysInMonth>0))return'';
+  const slsRow=METRIC_ROWS.find(m=>m.key==='sls');
+  const planTotal=slsRow.planKey(planAgg);
+  if(!(planTotal>0))return'';
+  const planForPeriod=planTotal*(cellDays||0)/daysInMonth;
+  if(!(planForPeriod>0))return'';
+  const fact=metricCumValue(dayArr,cumO,slsRow)||0;
+  const pct=fact/planForPeriod*100;
+  const color=pct>=100?'var(--color-text-success, #137333)':pct>=90?'var(--color-text-warning, #b7791f)':'var(--color-text-danger, #c5221f)';
+  return`<span title="Выполнение плана по продажам: ${pct.toFixed(0)}%" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0"></span>`;
+}
 // Полный подписанный блок — идёт в s2 (справа от фото/названия/комментария) в режиме "Все".
 // ВАЖНО: строки тут (.mrow/.msep) — те же классы с ЖЁСТКО зафиксированной высотой, что
 // использует compactDayValuesHTML() ниже, специально НЕ переиспользуем .pr-row/.pr-wrap
@@ -1168,37 +1333,145 @@ function _mgOpen(gk){
   _mgPrevGk=gk;
   return out;
 }
-function staticLabelBlockHTML(dayArr,cumO){
+// План/отклонение для ОДНОЙ метрики в ОДНОЙ ячейке (день / неделя-итого /
+// общий итог) — контекстное: cellDays = сколько дней "стоит" эта ячейка
+// (1 — колонка одного дня, N — колонка "Итого нед." той недели, lastDataDay —
+// накопительно по всем дням периода с фактом). 24.09.2026: раньше был
+// отдельный блок "План (в день)" с ОДНИМ и тем же дневным числом во всех
+// колонках без разбора — по просьбе пользователя убран, вместо него у самих
+// строк Заказы/Выкуп%/Продажи (и остальных с planKey) план теперь считается
+// под конкретную колонку: день → план на 1 день, неделя → план на дни этой
+// недели, общий итог → накопительно по факту (совпадает с тем, что уже было
+// в s2 раньше). planIsRatio (см. METRIC_ROWS — buyoutPct) — план НЕ
+// масштабируется по дням, это готовый % target, не сумма.
+function _planDevForMetric(m,v,planAgg,cellDays,daysInMonth){
+  if(!(planAgg&&m.planKey&&daysInMonth>0))return{planStr:'—',devStr:'—',devCls:''};
+  const planTotal=m.planKey(planAgg);
+  if(planTotal===null||planTotal===undefined||planTotal===0)return{planStr:'—',devStr:'—',devCls:''};
+  const planForPeriod=m.planIsRatio?planTotal:planTotal*(cellDays||0)/daysInMonth;
+  const dev=(v||0)-planForPeriod;
+  return{
+    planStr:fmtMetric(planForPeriod,m.fmt),
+    devStr:(dev>=0?'+':'')+fmtMetric(dev,m.fmt),
+    devCls:dev>=0?'pv':'nv',
+  };
+}
+// Пустой 3-строчный отступ сверху — держит "Заказы" (и всё ниже) на ОДНОЙ
+// горизонтальной линии ВО ВСЕХ колонках сразу (s2 / "Итого нед." / дни), даже
+// там, где эти 3 строки нечем заполнить. У дневных ячеек та же высота занята
+// РЕАЛЬНЫМ планом (_dayPlanRowsHTML) — важно, чтобы класс строки (has-lbl /
+// обычная / f2) совпадал с тем, что использует остальной блок этой же колонки,
+// иначе высота 16px может разойтись на суб-пиксель. 24.09.2026, прямая
+// формулировка пользователя: "строку Заказы... опускаешь на три строки вниз"
+// одинаково по ВСЕМ столбцам, не только по дням.
+function _topSpacerRowsHTML(lineCls){
+  let out=_mgOpen('plan');
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  out+=`<div class="mline ${lineCls}">&nbsp;</div>`;
+  return out;
+}
+// dayArr/cumO — факт (см. выше), planAgg — buildPlanAgg() по тем же артикулам,
+// lastDataDay/daysInMonth — для прорейтинга "план по последнюю дату факта"
+// (не весь месяц, а план × lastDataDay/daysInMonth — 24.09.2026, по просьбе
+// пользователя не сравнивать факт-за-часть-месяца с планом-на-весь-месяц).
+function staticLabelBlockHTML(dayArr,cumO,planAgg,lastDataDay,daysInMonth){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
+  out+=_topSpacerRowsHTML('has-lbl');
   METRIC_ROWS.forEach(m=>{
     const v=metricCumValue(dayArr,cumO,m);
     const pct=metricPct(cumO,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?`<div class="msep">${m.grp}</div>`:'';
-    out+=`<div class="mline"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+    // План/отклонение — САМОСТОЯТЕЛЬНЫЕ grid-колонки (см. .mline CSS),
+    // выводятся ВСЕГДА, даже "—", у метрик без плана — иначе колонки
+    // съезжают между строками.
+    const {planStr,devStr,devCls}=_planDevForMetric(m,v,planAgg,lastDataDay,daysInMonth);
+    const planPart=`<span class="mline-plan" title="План накопительно, ${lastDataDay||0} дн. из ${daysInMonth}">${planStr}</span>`+
+                    `<span class="mline-dev ${devCls}" title="Отклонение от плана">${devStr}</span>`;
+    out+=`<div class="mline has-lbl"><span class="mline-lbl">${m.label}</span><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}${planPart}</div>`;
   });
   out+='</div></div>';
   return out;
 }
-// Компактный набор чисел для ОДНОЙ ячейки-дня — тот же порядок метрик и те же
-// классы/высоты строк, что в staticLabelBlockHTML (см. коммент там), только без подписи —
-// подпись уже статично слева в s2, строка визуально дополняет её, а не повторяет.
+// Компактный ориентир НАД Заказы — ТОЛЬКО для ячейки одного дня (isSingleDay),
+// не для "Итого нед." (там уже полная факт/план/откл. разбивка — см. ниже).
+// 25.09.2026: полная разбивка по ВСЕМ метрикам в узкой ячейке одного дня —
+// избыточно ("полная сводка не нужна"), но и одно голое число с текстом
+// "план" внутри строки — тоже неверно ("не пиши план", у нас уже была
+// нормальная визуализация). Возвращено: 3 строки (Заказы/Выкуп%/Продажи,
+// равномерный дневной темп), БЕЗ подписи "план" в каждой строке — понятно
+// по одному лишь синему фону блока (.mgroup-plan), тот же приём, что уже
+// на строке категории/артикула не текстом, а цветом отличает группы.
+// Дневной план-ориентир для Заказы/Продажи/Выкуп % — финальная версия,
+// 24.09.2026, по прямому эскизу пользователя (фото от руки): план — ТРИ ПОЛНОЦЕННЫЕ
+// строки СВЕРХУ, тем же размером/строкой .mline.f2, что и все остальные метрики
+// (а не мелкий текст и не оверлей) — они СДВИГАЮТ вниз "старые" строки дня
+// (Заказы...Остатки), и это НАМЕРЕННО ("у тебя должна быть ступенька" — цитата).
+// Условие пользователя ОДНО: "старые данные не должны смещаться ОТНОСИТЕЛЬНО
+// ДРУГ ДРУГА" — т.е. внутри самой колонки дня порядок/интервалы между Заказы
+// →Продажи→...→Остатки остаются как были, просто весь блок целиком едет вниз
+// на высоту этих 3 строк (даёт "ступеньку" при сравнении с s2/"Итого нед." —
+// это ожидаемо и разрешено, не баг). Отдельно: в бейдж-слоте самих строк
+// Заказы/Продажи/Выкуп % (той же, что раньше) теперь не план, а ОТКЛОНЕНИЕ
+// факта от плана-на-день — переиспользуем _planDevForMetric с cellDays=1,
+// та же формула/раскраска, что уже даёт "Итого нед."/s2.
+// ВСЕГДА 3 строки, даже без плана (тогда просто пустые "—") — иначе для
+// артикула без плана тут будет 0 строк, а в s2/"Итого нед." (через
+// _topSpacerRowsHTML) — всегда 3, и "Заказы" опять разъедется на конкретно
+// этом артикуле. Отступ должен быть безусловным.
+function _dayPlanRowsHTML(planAgg,daysInMonth){
+  if(!planAgg||!(planAgg.ord>0||planAgg.buy>0)||!(daysInMonth>0))return _topSpacerRowsHTML('f2');
+  const planOrdDay=planAgg.ord/daysInMonth;
+  const planSlsDay=planAgg.buy/daysInMonth;
+  const planBuyoutPct=planAgg.ord>0?planAgg.buy/planAgg.ord*100:null;
+  let out=_mgOpen('plan');
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planOrdDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${fmtMetric(planSlsDay,'int')}</span><span class="mline-badge"></span></div>`;
+  out+=`<div class="mline f2"><span class="mline-fact">${planBuyoutPct!==null?fmtMetric(planBuyoutPct,'pct'):'—'}</span><span class="mline-badge"></span></div>`;
+  return out;
+}
+function _devBadgeHTML(m,v,planAgg,daysInMonth){
+  const{devStr,devCls}=_planDevForMetric(m,v,planAgg,1,daysInMonth);
+  if(devStr==='—')return'<span class="mline-badge"></span>';
+  const bg=devCls==='pv'?'var(--color-background-success)':'var(--color-background-danger)';
+  const col=devCls==='pv'?'var(--color-text-success)':'var(--color-text-danger)';
+  return`<span class="mline-badge"><span class="pr-pct" title="Отклонение от плана на день" style="background:${bg};color:${col}">${devStr}</span></span>`;
+}
+// Компактный набор чисел для ОДНОЙ ячейки. Два режима:
+//  - isSingleDay=true (ячейка ОДНОГО дня) — сверху 3 строки плана (см.
+//    _dayPlanRowsHTML), затем факт+бейдж (2 колонки, .mline.f2) по всем
+//    метрикам; у Заказы/Продажи/Выкуп % бейдж — отклонение от плана-на-день
+//    (см. _devBadgeHTML), у остальных метрик — обычный %-бейдж.
+//  - isSingleDay=false ("Итого нед.") — полный факт/бейдж/план/откл. (4
+//    колонки), та же логика, что в staticLabelBlockHTML, без подписи слева
+//    (она уже статично в s2, эта ячейка визуально дополняет её).
+// cellDays — сколько дней "стоит" эта ячейка (1 или дни недели) — см. _planDevForMetric.
 // o может быть null (артикул без единой проводки в этот рабочий день) — раньше тут
 // стоял ранний return'' (буквально пустая ячейка, без тире, выглядело как сбой
 // загрузки). metricVal(null,key)/metricPct(null,...) уже сами возвращают null,
 // а fmtMetric(null,...) уже возвращает '—' — просто не бейлимся раньше времени.
-function compactDayValuesHTML(o){
+function compactDayValuesHTML(o,planAgg,cellDays,daysInMonth,isSingleDay){
   let out='<div class="mline-wrap">';
   _mgPrevGk=null;
+  out+=isSingleDay?_dayPlanRowsHTML(planAgg,daysInMonth):_topSpacerRowsHTML('');
+  const devKeys=isSingleDay?new Set(['ord','sls','buyoutPct']):null;
   METRIC_ROWS.forEach(m=>{
     const v=metricVal(o,m.key);
     const pct=metricPct(o,m.key,m);
     const cls=(m.key==='np'||m.key==='ret')&&v!==null&&v<0?'nv':'';
     if(m.gk!==_mgPrevGk)out+=_mgOpen(m.gk);
     out+=m.grp?'<div class="msep">&nbsp;</div>':'';
-    out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}</div>`;
+    if(isSingleDay){
+      const badge=devKeys.has(m.key)?_devBadgeHTML(m,v,planAgg,daysInMonth):pctBadgeHTML(pct,v,m);
+      out+=`<div class="mline f2"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${badge}</div>`;
+    }else{
+      const {planStr,devStr,devCls}=_planDevForMetric(m,v,planAgg,cellDays,daysInMonth);
+      const planPart=`<span class="mline-plan">${planStr}</span><span class="mline-dev ${devCls}">${devStr}</span>`;
+      out+=`<div class="mline"><span class="mline-fact ${cls}">${fmtMetric(v,m.fmt)}</span>${pctBadgeHTML(pct,v,m)}${planPart}</div>`;
+    }
   });
   out+='</div></div>';
   return out;
@@ -1487,20 +1760,31 @@ function renderKpiBreakdown(){
   const k=d&&d.kpi&&d.kpi.find(x=>x.expand);
   if(!KPI_BREAKDOWN_OPEN||!k){box.innerHTML='';box.classList.add('hidden');return;}
   box.classList.remove('hidden');
+  // Ячейка "факт / план %" — тот же формат, что mkPR(), но компактно внутри
+  // одной табличной ячейки (без подписи метрики — она уже в заголовке столбца).
+  const planCell=(fact,plan,fmt)=>{
+    if(!fact&&!plan) return '—';
+    if(!plan) return fmt(fact);
+    const pct=Math.round(fact/plan*100);
+    const cls=pct>=95?'pv':pct>=80?'':'nv';
+    return `${fmt(fact)}<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span> <b class="${cls}">${pct}%</b>`;
+  };
   const tbl=(title,list)=>`
-    <div style="flex:1;min-width:220px">
+    <div style="flex:1;min-width:280px">
       <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--color-text-secondary)">${title}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <tr style="color:var(--color-text-tertiary);text-align:left">
           <th style="padding:2px 6px 2px 0;font-weight:500">Название</th>
-          <th style="padding:2px 6px;font-weight:500;text-align:right">Заказы</th>
-          <th style="padding:2px 6px;font-weight:500;text-align:right">Продажи</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Заказы (факт/план)</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Продажи (факт/план)</th>
+          <th style="padding:2px 6px;font-weight:500;text-align:right">Выручка (факт/план)</th>
           <th style="padding:2px 0;font-weight:500;text-align:right">Выкуп %</th>
         </tr>
         ${list.map(x=>`<tr>
           <td style="padding:2px 6px 2px 0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x.name}">${x.name}</td>
-          <td style="padding:2px 6px;text-align:right">${x.ord}</td>
-          <td style="padding:2px 6px;text-align:right">${x.buy}</td>
+          <td style="padding:2px 6px;text-align:right">${planCell(x.ord,x.planOrd,v=>v)}</td>
+          <td style="padding:2px 6px;text-align:right">${planCell(x.buy,x.planBuy,v=>v)}</td>
+          <td style="padding:2px 6px;text-align:right">${planCell(x.rev,x.planRev,v=>Nf(v)+'₽')}</td>
           <td style="padding:2px 0;text-align:right;font-weight:600">${x.pct.toFixed(1)}%</td>
         </tr>`).join('')}
       </table>
@@ -1636,6 +1920,12 @@ function render(){
     document.getElementById('tbl-container').innerHTML='<p style="padding:20px;color:#999;font-size:12px">Нет данных за этот период</p>';
     return;
   }
+  // Для плана (METRIC_ROWS/staticLabelBlockHTML) — план прорейтится РОВНО на
+  // столько дней, сколько сейчас показано в days (весь месяц или одна неделя
+  // при выбранном фильтре) — иначе план-на-весь-месяц сравнивался бы с
+  // фактом-за-одну-неделю и всегда выглядел заниженным. 24.09.2026.
+  const daysInMonth=new Date(CYEAR,CMONTH,0).getDate();
+  const periodDays=days.length;
   // ── Применяем фильтр видимости ────────────────────────────
   const visibleArts=d.articles.filter(a=>isArticleVisible(a));
   const hiddenArts =d.articles.filter(a=>!isArticleVisible(a));
@@ -1671,7 +1961,12 @@ function render(){
   let html=`<table class="main${CM==='all'?' all-mode':''}"><thead><tr>
     <th class="s0" rowspan="2"></th>
     <th class="s1" rowspan="2" style="text-align:left;padding-left:8px">Артикул</th>
-    <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">Факт&nbsp;/ план</th>`;
+    <th class="s2 plan-col" rowspan="2" style="text-align:left;padding-left:8px">${CM==='all'
+      ? `<div style="display:flex;gap:3px"><span style="width:64px"></span>
+          <span style="width:60px;text-align:right;flex-shrink:0">Факт</span>
+          <span style="width:60px;text-align:right;flex-shrink:0">План</span>
+          <span style="width:56px;text-align:right;flex-shrink:0">Откл.</span></div>`
+      : 'Факт&nbsp;/ план'}</th>`;
   weekGroups.forEach((wg,wi)=>{
     const collapsed=!!WEEK_COLLAPSED[wg.wk];
     const colspan=1+(collapsed?0:wg.days.length);
@@ -1770,6 +2065,35 @@ function render(){
       ? (_cpArts.reduce((s,a)=>s+a.commission_pct*a.commission_sum,0)/_cpArts.reduce((s,a)=>s+a.commission_sum,0)).toFixed(1)
       : (catGross>0?(catComm/catGross*100).toFixed(1):null);
 
+    // ── План по категории (24.09.2026: раньше на групповых строках плана не
+    // было вообще, только факт — план показывался только на строке отдельного
+    // артикула). Простая сумма art.plan_* по всем артикулам категории — те же
+    // поля, что уже читает buildArticles()/mkPR() на строке артикула, здесь
+    // просто складываем по группе, ничего заново не запрашиваем. ДРР —
+    // невзвешенное среднее % по артикулам, у которых план ДРР задан (та же
+    // логика, что avgPlanDrr в buildKPI() для карточки в kstrip).
+    // Общий агрегат плана категории — для METRIC_ROWS-блока (режим "Все",
+    // staticLabelBlockHTML/compactDayValuesHTML) и для блока "План (в день)"
+    // над Заказы. catPlanOrd/catPlanBuy/... ниже — те же числа, для
+    // не-"Все"-режима (mkPR-строки), посчитаны отдельно, т.к. были раньше.
+    const catPlanAgg=buildPlanAgg(arts);
+    const catPlanOrd=arts.reduce((s,a)=>s+(a.plan_ord||0),0);
+    const catPlanBuy=arts.reduce((s,a)=>s+(a.plan_buy||0),0);
+    const catPlanRev=arts.reduce((s,a)=>s+(a.plan_rev||0),0);
+    const _drrArts=arts.filter(a=>a.plan_drr>0);
+    const catPlanDrr=_drrArts.length>0?_drrArts.reduce((s,a)=>s+a.plan_drr,0)/_drrArts.length:0;
+    // Комиссия/логистика плана — сумма ₽-сумм по артикулам (не среднее % —
+    // база выручки разная у каждого), та же формула, что у отдельного
+    // артикула (art.plan_rev×art.plan_comm_pct/100), только сложенная по группе.
+    const catPlanComm=arts.reduce((s,a)=>s+(a.plan_rev>0&&a.plan_comm_pct>0?a.plan_rev*a.plan_comm_pct/100:0),0);
+    const catPlanLogi=arts.reduce((s,a)=>s+(a.plan_rev>0&&a.plan_logi_pct>0?a.plan_rev*a.plan_logi_pct/100:0),0);
+    const catPlanNp=arts.reduce((s,a)=>{
+      if(!(a.plan_rev>0))return s;
+      const c=a.plan_comm_pct>0?a.plan_rev*a.plan_comm_pct/100:0;
+      const l=a.plan_logi_pct>0?a.plan_rev*a.plan_logi_pct/100:0;
+      return s+(a.plan_rev-a.plan_vc*a.plan_buy-a.plan_spend-c-l);
+    },0);
+
     // Восстанавливаем состояние свёртки после перерисовки
     const isCollapsed=!!CAT_COLLAPSED[catId];
     const iconChar=isCollapsed?'▶':'▼';
@@ -1791,17 +2115,17 @@ function render(){
         <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cc};margin-right:6px;vertical-align:middle;border:0.5px solid rgba(0,0,0,0.1)"></span>${cat}
         <span style="font-size:9px;color:var(--color-text-tertiary);margin-left:4px">${arts.length} арт.</span>
       </td>
-      <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(catDayAll,catCum):`
+      <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(catDayAll,catCum,catPlanAgg,periodDays,daysInMonth):`
         <div class="pr-wrap" style="gap:2px">
-          <div class="pr-row"><span class="pr-lbl">Заказы</span><span class="pr-fact">${catFactOrd||0}</span></div>
-          <div class="pr-row"><span class="pr-lbl">Продажи</span><span class="pr-fact">${catFactSls||0}</span></div>
-          <div class="pr-row"><span class="pr-lbl">Выручка</span><span class="pr-fact">${Nf(catFactRev)}₽</span></div>
+          ${mkPR('Заказы',  catFactOrd, catPlanOrd, v=>v||0)}
+          ${mkPR('Продажи', catFactSls, catPlanBuy, v=>v||0)}
+          ${mkPR('Выручка', catFactRev, catPlanRev, v=>Nf(v)+'₽')}
           ${catFactSls>0?`<div class="pr-row"><span class="pr-lbl">Ср. чек</span><span class="pr-fact">${Nf(catFactRev/catFactSls)}₽</span></div>`:''}
-          ${catNp!==null?`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${catNp>=0?'pv':'nv'}">${Nf(catNp)}₽</span>${catNpPct?`<span class="pr-pct" style="background:${catNp>=0?'var(--color-background-success,#e6f4ea)':'var(--color-background-error,#fce8e6)'};color:${catNp>=0?'var(--color-text-success,#137333)':'var(--color-text-error,#c5221f)'}">${catNpPct}%</span>`:''}</div>`:''}
-          ${catFactSpend>0?`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(catFactSpend)}₽</span><span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catFactDrr}%</span></div>`:''}
-          ${catComm>0?`<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(catComm)}₽</span>${catCommPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catCommPct}%</span>`:''}</div>`:''}
+          ${catNp!==null?`<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${catNp>=0?'pv':'nv'}">${Nf(catNp)}₽</span>${catNpPct?`<span class="pr-pct" style="background:${catNp>=0?'var(--color-background-success,#e6f4ea)':'var(--color-background-error,#fce8e6)'};color:${catNp>=0?'var(--color-text-success,#137333)':'var(--color-text-error,#c5221f)'}">${catNpPct}%</span>`:''}${catPlanNp!==0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanNp)}₽</span>`:''}</div>`:''}
+          ${catFactSpend>0?`<div class="pr-row"><span class="pr-lbl">ДРР</span><span class="pr-fact">${Nf(catFactSpend)}₽</span><span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catFactDrr}%</span>${catPlanDrr>0?`<span class="pr-sep">/</span><span class="pr-plan">${catPlanDrr.toFixed(1)}%</span>`:''}</div>`:''}
+          ${catComm>0?`<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(catComm)}₽</span>${catCommPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${catCommPct}%</span>`:''}${catPlanComm>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanComm)}₽</span>`:''}</div>`:''}
           ${catAcq>0?`<div class="pr-row"><span class="pr-lbl">Эквайринг</span><span class="pr-fact">${Nf(catAcq)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catAcq/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
-          ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}</div>`:''}
+          ${catLogi>0?`<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(catLogi)}₽</span>${catGross>0?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${(catLogi/catGross*100).toFixed(1)}%</span>`:''}${catPlanLogi>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(catPlanLogi)}₽</span>`:''}</div>`:''}
         </div>`}
       </td>`;
     weekGroups.forEach((wg,wi)=>{
@@ -1809,14 +2133,14 @@ function render(){
       const wkDayList=wg.days.map(x=>x.day);
       const wkSepCls=wi>0?' wk-sep':'';
       if(CM==='all'){
-        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList))}</td>`;
+        html+=`<td class="cat-sub wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(arts,wkDayList),catPlanAgg,wg.days.length,daysInMonth,false)}</td>`;
       }else{
         const wv=statValueForMetric(calcStats(arts,wkDayList),CM);
         html+=`<td class="cat-sub wk-total${wkSepCls}">${fmtV(wv,CM)}</td>`;
       }
       if(!collapsed)wg.days.forEach(({day,di})=>{
         if(CM==='all'){
-          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di])}</td>`;
+          html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(catDayAll[di],catPlanAgg,1,daysInMonth,true)}</td>`;
         }else{
           const v=catDayTotals[di];
           html+=`<td class="cat-sub${day.off?' off-day':''}">${day.off?'—':fmtV(v,CM)}</td>`;
@@ -1866,17 +2190,8 @@ function render(){
         });
       }
 
-      // ── Постоянная сводка факт/план (не зависит от выбранного метрика) ──
-      function mkPR(lbl, fact, plan, fmt) {
-        const f = fmt(fact);
-        if (!fact && !plan) return '';
-        const pct = plan > 0 ? Math.round(fact / plan * 100) : null;
-        const cls = pct === null ? '' : pct >= 100 ? 'pv' : pct >= 70 ? 'nw' : 'nv';
-        const planPart = plan
-          ? `<span class="pr-sep">/</span><span class="pr-plan">${fmt(plan)}</span><span class="pr-pct ${cls}">${pct}%</span>`
-          : '';
-        return `<div class="pr-row"><span class="pr-lbl">${lbl}</span><span class="pr-fact">${f}</span>${planPart}</div>`;
-      }
+      // mkPR — вынесен на верхний уровень (см. рядом с fmtMetric), т.к. теперь
+      // используется и строкой категории (выше по коду), не только артикулом.
       const prOrd = mkPR('Заказы',  factOrd, art.plan_ord, v => v||0);
       const prSls = mkPR('Продажи', factSls, art.plan_buy, v => v||0);
       const prRev = mkPR('Выручка', factRev, art.plan_rev, v=>Nf(v)+'₽');
@@ -1898,14 +2213,20 @@ function render(){
       const commPct = art.commission_pct > 0 ? art.commission_pct.toFixed(1) : (gross > 0 ? (comm / gross * 100).toFixed(1) : null);
       const acqPct  = gross > 0 ? (acq  / gross * 100).toFixed(1) : null;
       const logiPct = gross > 0 ? (logi / gross * 100).toFixed(1) : null;
+      // План по комиссии/логистике — из %% плана (art.plan_comm_pct/plan_logi_pct,
+      // 24.09.2026, требует migration_plan_pct_fields.sql) × план-выручка, та же
+      // логика, что у факта (comm/gross → %, тут наоборот %×revenue → ₽), чтобы
+      // сравнивать ₽ с ₽, а не смешивать % плана с ₽ факта.
+      const planComm = art.plan_rev>0 && art.plan_comm_pct>0 ? art.plan_rev*art.plan_comm_pct/100 : 0;
+      const planLogi = art.plan_rev>0 && art.plan_logi_pct>0 ? art.plan_rev*art.plan_logi_pct/100 : 0;
       const prComm = comm > 0
-        ? `<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(comm)}₽</span>${commPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${commPct}%</span>`:''}</div>`
+        ? `<div class="pr-row"><span class="pr-lbl">Комиссия</span><span class="pr-fact">${Nf(comm)}₽</span>${commPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${commPct}%</span>`:''}${planComm>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planComm)}₽</span>`:''}</div>`
         : '';
       const prAcq = acq > 0
         ? `<div class="pr-row"><span class="pr-lbl">Эквайринг</span><span class="pr-fact">${Nf(acq)}₽</span>${acqPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${acqPct}%</span>`:''}</div>`
         : '';
       const prLogi = logi > 0
-        ? `<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(logi)}₽</span>${logiPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${logiPct}%</span>`:''}</div>`
+        ? `<div class="pr-row"><span class="pr-lbl">Логистика</span><span class="pr-fact">${Nf(logi)}₽</span>${logiPct?`<span class="pr-pct" style="background:var(--color-background-warning);color:var(--color-text-warning)">${logiPct}%</span>`:''}${planLogi>0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planLogi)}₽</span>`:''}</div>`
         : '';
 
       // ЧП = Выручка - С/С×Продажи - Реклама - Комиссия - Эквайринг - Логистика.
@@ -1917,13 +2238,22 @@ function render(){
         const np = factRev - art.cogs * factSls - factSpend - comm - acq - logi;
         const npPct = (np / factRev * 100).toFixed(1);
         const npCls = np >= 0 ? 'pv' : 'nv';
-        prNp = `<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${Nf(np)}₽</span><span class="pr-pct ${npCls}" style="background:${np>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${np>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${npPct}%</span></div>`;
+        // План ЧП = план-выручка − план-себестоимость×план-продажи − план-реклама
+        // − план-комиссия − план-логистика (эквайринг в плане не задают — не
+        // собирается со стороны продавца отдельным полем, эквайринг ниоткуда
+        // не берём и в плане ЧП не вычитаем, как и Эквайринг не показан с планом выше).
+        const planNp = art.plan_rev>0
+          ? art.plan_rev - art.plan_vc*art.plan_buy - art.plan_spend - planComm - planLogi
+          : 0;
+        const planNpPart = planNp!==0?`<span class="pr-sep">/</span><span class="pr-plan">${Nf(planNp)}₽</span>`:'';
+        prNp = `<div class="pr-row"><span class="pr-lbl">ЧП</span><span class="pr-fact ${npCls}">${Nf(np)}₽</span><span class="pr-pct ${npCls}" style="background:${np>=0?'var(--color-background-success, #e6f4ea)':'var(--color-background-error, #fce8e6)'};color:${np>=0?'var(--color-text-success, #137333)':'var(--color-text-error, #c5221f)'}">${npPct}%</span>${planNpPart}</div>`;
       }
 
       const hasPrData = prOrd || prSls || prRev;
+      const artPlanAgg = buildPlanAgg([art]);
       // Режим "Все": s2 — единственное место с подписями (все 18 метрик, не только
       // те 9 что имеют план), ячейки дней ниже — те же метрики без подписей.
-      const sm = CM==='all' ? staticLabelBlockHTML(artDayGated,artCum) : hasPrData
+      const sm = CM==='all' ? staticLabelBlockHTML(artDayGated,artCum,artPlanAgg,periodDays,daysInMonth) : hasPrData
         ? `<div class="pr-wrap">${prOrd}${prSls}${prRev}${prAvg}${prNp}${prDrr}${prComm}${prAcq}${prLogi}</div>`
         : `<span class="pr-noplan">нет плана</span>`;
 
@@ -1938,7 +2268,7 @@ function render(){
       const artKey=art.name.replace(/'/g,"\\'");
       html+=`<tr class="art-row" data-cat="${catId}" style="${isCollapsed?'display:none':''}">
         <td class="s0">${photoCell}</td>
-        <td class="s1"><div style="display:flex;align-items:center;gap:3px"><span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
+        <td class="s1"><div style="display:flex;align-items:center;gap:3px">${planCompletionDotHTML(artDayGated,artCum,artPlanAgg,periodDays,daysInMonth)}<span class="art-name" title="${art.name}" style="max-width:${CM==='all'?'190px':'210px'}">${art.name}</span></div>
           ${commentFieldHTML(art.name,artKey,MP_DB[CMP]||CMP)}</td>
         <td class="s2 plan-col"><div class="pf-cell">${sm}</div></td>`;
       weekGroups.forEach((wg,wi)=>{
@@ -1946,14 +2276,14 @@ function render(){
         const wkDayList=wg.days.map(x=>x.day);
         const wkSepCls=wi>0?' wk-sep':'';
         if(CM==='all'){
-          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList))}</td>`;
+          html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum([art],wkDayList),artPlanAgg,wg.days.length,daysInMonth,false)}</td>`;
         }else{
           const wv=statValueForMetric(calcStats([art],wkDayList),CM);
           html+=`<td class="wk-total${wkSepCls}"><span class="dv">${fmtV(wv,CM)}</span></td>`;
         }
         if(!collapsed)wg.days.forEach(({day,di})=>{
           if(CM==='all'){
-            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di])}</td>`;
+            html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(artDayGated[di],artPlanAgg,1,daysInMonth,true)}</td>`;
           }else{
             const v=getV(art,day,CM);
             html+=`<td class="${day.off?'':heatCls(v,CM,gMin,gMax)}${day.off?' off-day':''}"><span class="dv">${day.off?'—':fmtV(v,CM)}</span></td>`;
@@ -1973,22 +2303,23 @@ function render(){
       adShows:0,adClicks:0,adCart:0,adOrders:0,totalShows:0,totalCart:0,totalOrders:0,cancelled:0};
     dayTotalsAll.forEach(o=>{if(!o)return;for(const k in totalCum)totalCum[k]+=o[k]||0;});
   }
+  const totalPlanAgg=buildPlanAgg(displayArts);
   html+=`<tr class="total-row">
     <td class="s0"></td><td class="s1" style="padding-left:8px">Итого</td>
-    <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(dayTotalsAll,totalCum):''}</td>`;
+    <td class="s2 plan-col">${CM==='all'?staticLabelBlockHTML(dayTotalsAll,totalCum,totalPlanAgg,periodDays,daysInMonth):''}</td>`;
   weekGroups.forEach((wg,wi)=>{
     const collapsed=!!WEEK_COLLAPSED[wg.wk];
     const wkDayList=wg.days.map(x=>x.day);
     const wkSepCls=wi>0?' wk-sep':'';
     if(CM==='all'){
-      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList))}</td>`;
+      html+=`<td class="all-cell wk-total${wkSepCls}">${compactDayValuesHTML(calcGatedWeekCum(displayArts,wkDayList),totalPlanAgg,wg.days.length,daysInMonth,false)}</td>`;
     }else{
       const wv=statValueForMetric(calcStats(displayArts,wkDayList),CM);
       html+=`<td class="wk-total${wkSepCls}" style="text-align:center">${fmtV(wv,CM)}</td>`;
     }
     if(!collapsed)wg.days.forEach(({day,di})=>{
       if(CM==='all'){
-        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di])}</td>`;
+        html+=`<td class="all-cell${day.off?' off-day':''}">${day.off?'—':compactDayValuesHTML(dayTotalsAll[di],totalPlanAgg,1,daysInMonth,true)}</td>`;
       }else{
         html+=`<td class="${day.off?' off-day':''}" style="text-align:center">${day.off?'—':fmtV(dayTotals[di],CM)}</td>`;
       }
