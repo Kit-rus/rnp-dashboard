@@ -285,7 +285,8 @@ function setMP(mp){
   if(mp==='lamoda'){
     document.getElementById('b-month').classList.toggle('on',PERIOD==='month');
     document.getElementById('b-week').classList.toggle('on',PERIOD==='week');
-    PERIOD==='week' ? renderLamodaWeekly() : renderLamodaStatic();
+    loadHiddenPeriods();
+    renderLamodaTable();
     return;
   }
   loadHiddenPeriods();
@@ -298,120 +299,116 @@ function setMP(mp){
 // financial_transactions (source='lamoda') + Управление заказами.csv — см.
 // lamoda_finance_preview.html, откуда этот блок скопирован 1:1. Обновлять
 // руками при каждой новой «Расшифровке ПП», пока нет отдельной вьюхи.
-function renderLamodaStatic(){
-  document.getElementById('tbl').className='';
-  document.getElementById('tbl').innerHTML = `
-    <table>
-      <tr><th>Показатель</th><th>Июль 2026</th><th>Август 2026</th><th>Сентябрь 2026 (расчётно)</th></tr>
-      ${hscrollRowHtml(5)}
+const LAMODA_DATA = {"monthly": [{"key": "2026-07", "label": "Июль 2026", "confirmed": true, "orders": 16, "sales_qty": 2, "returns_qty": 1, "revenue": 33000.0, "cogs": 7600.0, "m1": 25400.0, "commission": 10670.0, "acquiring": 594.0, "sklad": 3700.0, "var_costs": 11264.0, "m2": 14136.0, "ad": 0, "m3": 14136.0, "other_ded": 69.0, "final_profit": 10367.0, "avg_check": 16500.0, "buyout_pct": 12.5}, {"key": "2026-08", "label": "Август 2026", "confirmed": true, "orders": 109, "sales_qty": 31, "returns_qty": 33, "revenue": 369765.0, "cogs": 117800.0, "m1": 251965.0, "commission": 150294.16, "acquiring": 6851.07, "sklad": 0.0, "var_costs": 157145.23, "m2": 94819.77, "ad": 18727.79, "m3": 76091.98, "other_ded": 2277.0, "final_profit": 73814.98, "avg_check": 11927.9, "buyout_pct": 28.4}, {"key": "2026-09", "label": "Сентябрь 2026", "confirmed": false, "orders": 106, "sales_qty": 44, "returns_qty": 30, "revenue": 587013.0, "cogs": 167200.0, "m1": 419813.0, "commission": 234598.47, "acquiring": 10850.88, "sklad": 0.0, "var_costs": 245449.35, "m2": 174363.65, "ad": 0, "m3": 174363.65, "other_ded": 2070.0, "final_profit": 172293.65, "avg_check": 13341.2, "buyout_pct": 41.5}], "weekly": [{"key": "2026-07-13", "label": "Нед.29 (13.07–19.07)", "confirmed": false, "orders": 0, "sales_qty": 0, "returns_qty": 0, "revenue": 0.0, "cogs": 0.0, "m1": 0.0, "commission": 0.0, "acquiring": 0.0, "sklad": 3700.0, "var_costs": 0.0, "m2": 0.0, "ad": 0, "m3": 0.0, "other_ded": 0.0, "final_profit": -3700.0, "avg_check": 0, "buyout_pct": 0}, {"key": "2026-07-20", "label": "Нед.30 (20.07–26.07)", "confirmed": false, "orders": 4, "sales_qty": 0, "returns_qty": 2, "revenue": 0.0, "cogs": 0.0, "m1": 0.0, "commission": 0.0, "acquiring": 0.0, "sklad": 0.0, "var_costs": 0.0, "m2": 0.0, "ad": 0, "m3": 0.0, "other_ded": 138.0, "final_profit": -138.0, "avg_check": 0, "buyout_pct": 0.0}, {"key": "2026-07-27", "label": "Нед.31 (27.07–02.08)", "confirmed": true, "orders": 14, "sales_qty": 2, "returns_qty": 2, "revenue": 33000.0, "cogs": 7600.0, "m1": 25400.0, "commission": 10670.0, "acquiring": 594.0, "sklad": 0.0, "var_costs": 11264.0, "m2": 14136.0, "ad": 0, "m3": 14136.0, "other_ded": 138.0, "final_profit": 13998.0, "avg_check": 16500.0, "buyout_pct": 14.3}, {"key": "2026-08-03", "label": "Нед.32 (03.08–09.08)", "confirmed": true, "orders": 11, "sales_qty": 1, "returns_qty": 6, "revenue": 17300.0, "cogs": 3800.0, "m1": 13500.0, "commission": 7092.0, "acquiring": 311.4, "sklad": 0.0, "var_costs": 7403.4, "m2": 6096.6, "ad": 0, "m3": 6096.6, "other_ded": 414.0, "final_profit": 5682.6, "avg_check": 17300.0, "buyout_pct": 9.1}, {"key": "2026-08-10", "label": "Нед.33 (10.08–16.08)", "confirmed": true, "orders": 33, "sales_qty": 4, "returns_qty": 7, "revenue": 47950.0, "cogs": 15200.0, "m1": 32750.0, "commission": 16050.0, "acquiring": 863.1, "sklad": 0.0, "var_costs": 16913.1, "m2": 15836.9, "ad": 0, "m3": 15836.9, "other_ded": 483.0, "final_profit": 15353.9, "avg_check": 11987.5, "buyout_pct": 12.1}, {"key": "2026-08-17", "label": "Нед.34 (17.08–23.08)", "confirmed": true, "orders": 23, "sales_qty": 14, "returns_qty": 10, "revenue": 155749.0, "cogs": 53200.0, "m1": 102549.0, "commission": 65153.58, "acquiring": 2803.48, "sklad": 0.0, "var_costs": 67957.06, "m2": 34591.94, "ad": 0, "m3": 34591.94, "other_ded": 690.0, "final_profit": 33901.94, "avg_check": 11124.93, "buyout_pct": 60.9}, {"key": "2026-08-24", "label": "Нед.35 (24.08–30.08)", "confirmed": true, "orders": 33, "sales_qty": 10, "returns_qty": 8, "revenue": 122449.0, "cogs": 38000.0, "m1": 84449.0, "commission": 50993.58, "acquiring": 2399.38, "sklad": 0.0, "var_costs": 53392.96, "m2": 31056.04, "ad": 0, "m3": 31056.04, "other_ded": 552.0, "final_profit": 30504.04, "avg_check": 12244.9, "buyout_pct": 30.3}, {"key": "2026-08-31", "label": "Нед.36 (31.08–06.09)", "confirmed": true, "orders": 30, "sales_qty": 2, "returns_qty": 1, "revenue": 26317.0, "cogs": 7600.0, "m1": 18717.0, "commission": 11005.0, "acquiring": 473.71, "sklad": 0.0, "var_costs": 11478.71, "m2": 7238.29, "ad": 18727.79, "m3": -11489.5, "other_ded": 69.0, "final_profit": -11558.5, "avg_check": 13158.5, "buyout_pct": 6.7}, {"key": "2026-09-07", "label": "Нед.37 (07.09–13.09)", "confirmed": false, "orders": 18, "sales_qty": 6, "returns_qty": 11, "revenue": 105437.0, "cogs": 22800.0, "m1": 82637.0, "commission": 42137.67, "acquiring": 1948.99, "sklad": 0.0, "var_costs": 44086.66, "m2": 38550.34, "ad": 0, "m3": 38550.34, "other_ded": 759.0, "final_profit": 37791.34, "avg_check": 17572.83, "buyout_pct": 33.3}, {"key": "2026-09-14", "label": "Нед.38 (14.09–20.09)", "confirmed": false, "orders": 34, "sales_qty": 20, "returns_qty": 5, "revenue": 238871.0, "cogs": 76000.0, "m1": 162871.0, "commission": 95464.28, "acquiring": 4415.51, "sklad": 0.0, "var_costs": 99879.78, "m2": 62991.22, "ad": 0, "m3": 62991.22, "other_ded": 345.0, "final_profit": 62646.22, "avg_check": 11943.55, "buyout_pct": 58.8}, {"key": "2026-09-21", "label": "Нед.39 (21.09–27.09)", "confirmed": false, "orders": 28, "sales_qty": 8, "returns_qty": 5, "revenue": 105409.0, "cogs": 30400.0, "m1": 75009.0, "commission": 42126.48, "acquiring": 1948.47, "sklad": 0.0, "var_costs": 44074.95, "m2": 30934.05, "ad": 0, "m3": 30934.05, "other_ded": 345.0, "final_profit": 30589.05, "avg_check": 13176.12, "buyout_pct": 28.6}, {"key": "2026-09-28", "label": "Нед.40 (28.09–04.10)", "confirmed": false, "orders": 3, "sales_qty": 0, "returns_qty": 0, "revenue": 0.0, "cogs": 0.0, "m1": 0.0, "commission": 0.0, "acquiring": 0.0, "sklad": 0.0, "var_costs": 0.0, "m2": 0.0, "ad": 0, "m3": 0.0, "other_ded": 0.0, "final_profit": 0.0, "avg_check": 0, "buyout_pct": 0.0}]};
 
-      <tr class="section"><td class="lbl">Объём</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Заказы, шт</td><td>16</td><td>109</td><td>106</td></tr>
-      <tr><td class="lbl">Продажи (выкупы), шт</td><td>2</td><td>31</td><td>44</td></tr>
-      <tr><td class="lbl">Возвраты, шт</td><td>1</td><td>33</td><td>30</td></tr>
-      <tr><td class="lbl">Выкупаемость, %</td><td>12,5%</td><td>28,4%</td><td>41,5%</td></tr>
-      <tr><td class="lbl">Средний чек наш (до СПП), ₽</td><td>16 500₽</td><td>11 928₽</td><td>13 341₽</td></tr>
-      <tr><td class="lbl">Средний чек клиента (после СПП), ₽</td><td>16 500₽</td><td>11 928₽</td><td>13 341₽</td></tr>
-      <tr><td class="lbl">Средний уровень СПП, %</td><td>0,0%</td><td>0,0%</td><td>0,0%</td></tr>
-
-      <tr class="section"><td class="lbl">Выручка</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Выручка (до СПП)</td><td>33 000₽</td><td>369 765₽</td><td>587 013₽</td></tr>
-      <tr><td class="lbl">Выручка после СПП</td><td>33 000₽</td><td>369 765₽</td><td>587 013₽</td></tr>
-      <tr><td class="lbl">Себестоимость</td><td>7 600₽<span class="pct">23,0%</span></td><td>117 800₽<span class="pct">31,9%</span></td><td>167 200₽<span class="pct">28,5%</span></td></tr>
-      <tr class="total"><td class="lbl">Валовая прибыль (М1)</td><td class="pos">25 400₽<span class="pct">77,0%</span></td><td class="pos">251 965₽<span class="pct">68,1%</span></td><td class="pos">419 813₽<span class="pct">71,5%</span></td></tr>
-
-      <tr class="section"><td class="lbl">Переменные расходы МП</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Комиссия МП</td><td>10 670₽<span class="pct">32,3%</span></td><td>150 294₽<span class="pct">40,6%</span></td><td>234 598₽<span class="pct">40,0%</span></td></tr>
-      <tr><td class="lbl">Эквайринг</td><td>594₽<span class="pct">1,8%</span></td><td>6 851₽<span class="pct">1,9%</span></td><td>10 851₽<span class="pct">1,8%</span></td></tr>
-      <tr><td class="lbl">Логистика до клиента</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Логистика от клиента (возвраты)</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Хранение</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Итого переменные расходы МП</td><td>11 264₽<span class="pct">34,1%</span></td><td>157 145₽<span class="pct">42,5%</span></td><td>245 449₽<span class="pct">41,8%</span></td></tr>
-      <tr class="total"><td class="lbl">Маржинальная прибыль (М2)</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">94 820₽<span class="pct">25,6%</span></td><td class="pos">174 364₽<span class="pct">29,7%</span></td></tr>
-
-      <tr class="section"><td class="lbl">Продвижение</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Реклама на МП (ДРР)</td><td>0₽<span class="pct">0,0%</span></td><td>18 728₽<span class="pct">5,1%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Самовыкупы</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Блогеры</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr><td class="lbl">Инструменты менеджера</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-      <tr class="total"><td class="lbl">Маржинальная прибыль (М3)</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">76 092₽<span class="pct">20,6%</span></td><td class="pos">174 364₽<span class="pct">29,7%</span></td></tr>
-
-      <tr class="section"><td class="lbl">Прочее</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Прочие расходы МП</td><td>69₽<span class="pct">0,2%</span></td><td>2 277₽<span class="pct">0,6%</span></td><td>2 070₽<span class="pct">0,4%</span></td></tr>
-      <tr><td class="lbl">Склад / поставка (кросс-докинг и т.п.)</td><td>3 700₽<span class="pct">11,2%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-
-      <tr class="section"><td class="lbl">Итог</td><td></td><td></td><td></td></tr>
-      <tr class="total"><td class="lbl">Прибыль МП</td><td class="pos">10 367₽<span class="pct">31,4%</span></td><td class="pos">73 815₽<span class="pct">20,0%</span></td><td class="pos">172 294₽<span class="pct">29,4%</span></td></tr>
-      <tr class="total"><td class="lbl">Чистая прибыль (ЧП)</td><td class="pos">10 367₽<span class="pct">31,4%</span></td><td class="pos">73 815₽<span class="pct">20,0%</span></td><td class="pos">172 294₽<span class="pct">29,4%</span></td></tr>
-
-      <tr class="section"><td class="lbl">Запасы</td><td></td><td></td><td></td></tr>
-      <tr><td class="lbl">Остаток на конец периода, шт</td><td>—</td><td>—</td><td>—</td></tr>
-      <tr><td class="lbl">Остаток на конец периода, ₽</td><td>—</td><td>—</td><td>—</td></tr>
-      <tr><td class="lbl">Оборачиваемость, дн</td><td>—</td><td>—</td><td>—</td></tr>
-    </table>
-    <div class="note" style="padding:10px 14px">
-      Статично, не живой запрос (нет daily_metrics для Lamoda — v_monthly_finance даёт 0 строк). Июль/август —
-      факт из «Расшифровка ПП»/«Отчёт комиссионера»/«Расшифровка услуг». Сентябрь — расчётно по
-      «Управление заказами» (см. lamoda_finance_preview.html за методикой). Обновляется вручную.
-    </div>`;
-  requestAnimationFrame(()=>initHScroll('tbl'));
+function lamodaSection(label, n){
+  return '<tr class="section"><td class="lbl">'+label+'</td>'+'<td></td>'.repeat(n)+'</tr>';
+}
+function lamodaMoneyCell(v, base){
+  const p = base ? Pct(v, base) : null;
+  const pspan = (p && p!=='\u2014') ? ('<span class="pct">'+p+'</span>') : '';
+  return '<td>'+Nf(v)+'\u20BD'+pspan+'</td>';
+}
+function lamodaTotalCell(v, base){
+  const cls = v>=0 ? 'pos' : 'neg';
+  const p = base ? Pct(v, base) : null;
+  const pspan = (p && p!=='\u2014') ? ('<span class="pct">'+p+'</span>') : '';
+  return '<td class="'+cls+'">'+Nf(v)+'\u20BD'+pspan+'</td>';
+}
+function lamodaRow(label, periods, key, fmt){
+  const cells = periods.map(function(d){
+    if(fmt==='int') return '<td>'+d[key]+'</td>';
+    if(fmt==='pct1') return '<td>'+String(d[key]).replace('.',',')+'%</td>';
+    return '<td>'+Nf(d[key])+'\u20BD</td>';
+  }).join('');
+  return '<tr><td class="lbl">'+label+'</td>'+cells+'</tr>';
+}
+function lamodaMoneyRow(label, periods, key, baseKey){
+  const cells = periods.map(function(d){ return lamodaMoneyCell(d[key], baseKey?d[baseKey]:null); }).join('');
+  return '<tr><td class="lbl">'+label+'</td>'+cells+'</tr>';
+}
+function lamodaTotalRow(label, periods, key, baseKey){
+  const cells = periods.map(function(d){ return lamodaTotalCell(d[key], baseKey?d[baseKey]:null); }).join('');
+  return '<tr class="total"><td class="lbl">'+label+'</td>'+cells+'</tr>';
 }
 
-function renderLamodaWeekly(){
+function renderLamodaTable(){
+  const all = PERIOD==='week' ? LAMODA_DATA.weekly : LAMODA_DATA.monthly;
+  const periods = all.filter(function(d){ return !HIDDEN_PERIODS.has(d.key); });
+
+  let ph='';
+  for(const d of all){
+    const checked = !HIDDEN_PERIODS.has(d.key) ? 'checked' : '';
+    ph+='<label><input type="checkbox" value="'+d.key+'" '+checked+' onchange="onPeriodCheck(this)"> '+d.label+(d.confirmed?'':' (\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)')+'</label>';
+  }
+  document.getElementById('period-checks').innerHTML=ph;
+
+  if(!periods.length){
+    document.getElementById('tbl').className='';
+    document.getElementById('tbl').innerHTML='<span class="muted">\u0412\u0441\u0435 \u043f\u0435\u0440\u0438\u043e\u0434\u044b \u0441\u043a\u0440\u044b\u0442\u044b \u2014 \u0432\u043a\u043b\u044e\u0447\u0438 \u0445\u043e\u0442\u044f \u0431\u044b \u043e\u0434\u0438\u043d \u0432 \u00ab\u2699 \u041f\u0435\u0440\u0438\u043e\u0434\u044b\u00bb.</span>';
+    return;
+  }
+
+  const n=periods.length;
+  let h='<tr><th>\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c</th>'+periods.map(function(d){ return '<th>'+d.label+(d.confirmed?'':' (\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)')+'</th>'; }).join('')+'</tr>';
+  h+=hscrollRowHtml(n+1);
+
+  h+=lamodaSection('\u041e\u0431\u044a\u0451\u043c', n);
+  h+=lamodaRow('\u0417\u0430\u043a\u0430\u0437\u044b, \u0448\u0442', periods, 'orders', 'int');
+  h+=lamodaRow('\u041f\u0440\u043e\u0434\u0430\u0436\u0438 (\u0432\u044b\u043a\u0443\u043f\u044b), \u0448\u0442', periods, 'sales_qty', 'int');
+  h+=lamodaRow('\u0412\u043e\u0437\u0432\u0440\u0430\u0442\u044b, \u0448\u0442', periods, 'returns_qty', 'int');
+  h+=lamodaRow('\u0412\u044b\u043a\u0443\u043f\u0430\u0435\u043c\u043e\u0441\u0442\u044c, %', periods, 'buyout_pct', 'pct1');
+  h+=lamodaRow('\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u0447\u0435\u043a \u043d\u0430\u0448 (\u0434\u043e \u0421\u041f\u041f), \u20BD', periods, 'avg_check', 'money');
+
+  h+=lamodaSection('\u0412\u044b\u0440\u0443\u0447\u043a\u0430', n);
+  h+=lamodaMoneyRow('\u0412\u044b\u0440\u0443\u0447\u043a\u0430 (\u0434\u043e \u0421\u041f\u041f)', periods, 'revenue');
+  h+=lamodaMoneyRow('\u0421\u0435\u0431\u0435\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c', periods, 'cogs', 'revenue');
+  h+=lamodaTotalRow('\u0412\u0430\u043b\u043e\u0432\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c1)', periods, 'm1', 'revenue');
+
+  h+=lamodaSection('\u041f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', n);
+  h+=lamodaMoneyRow('\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u041c\u041f', periods, 'commission', 'revenue');
+  h+=lamodaMoneyRow('\u042d\u043a\u0432\u0430\u0439\u0440\u0438\u043d\u0433', periods, 'acquiring', 'revenue');
+  h+='<tr><td class="lbl">\u041b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0430 \u0434\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430</td>'+periods.map(function(){ return '<td>0\u20BD</td>'; }).join('')+'</tr>';
+  h+='<tr><td class="lbl">\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435</td>'+periods.map(function(){ return '<td>0\u20BD</td>'; }).join('')+'</tr>';
+  h+=lamodaMoneyRow('\u0418\u0442\u043e\u0433\u043e \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', periods, 'var_costs', 'revenue');
+  h+=lamodaTotalRow('\u041c\u0430\u0440\u0436\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c2)', periods, 'm2', 'revenue');
+
+  h+=lamodaSection('\u041f\u0440\u043e\u0434\u0432\u0438\u0436\u0435\u043d\u0438\u0435', n);
+  h+=lamodaMoneyRow('\u0420\u0435\u043a\u043b\u0430\u043c\u0430 \u043d\u0430 \u041c\u041f (\u0414\u0420\u0420)', periods, 'ad', 'revenue');
+  h+=lamodaTotalRow('\u041c\u0430\u0440\u0436\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c3)', periods, 'm3', 'revenue');
+
+  h+=lamodaSection('\u041f\u0440\u043e\u0447\u0435\u0435', n);
+  h+=lamodaMoneyRow('\u041f\u0440\u043e\u0447\u0438\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', periods, 'other_ded', 'revenue');
+  h+=lamodaMoneyRow('\u0421\u043a\u043b\u0430\u0434 / \u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0430 (\u043a\u0440\u043e\u0441\u0441-\u0434\u043e\u043a\u0438\u043d\u0433 \u0438 \u0442.\u043f.)', periods, 'sklad', 'revenue');
+
+  h+=lamodaSection('\u0418\u0442\u043e\u0433', n);
+  h+=lamodaTotalRow('\u041f\u0440\u0438\u0431\u044b\u043b\u044c \u041c\u041f', periods, 'final_profit', 'revenue');
+  h+=lamodaTotalRow('\u0427\u0438\u0441\u0442\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u0427\u041f)', periods, 'final_profit', 'revenue');
+
+  h+=lamodaSection('\u0417\u0430\u043f\u0430\u0441\u044b', n);
+  h+='<tr><td class="lbl">\u041e\u0441\u0442\u0430\u0442\u043e\u043a \u043d\u0430 \u043a\u043e\u043d\u0435\u0446 \u043f\u0435\u0440\u0438\u043e\u0434\u0430, \u0448\u0442</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
+  h+='<tr><td class="lbl">\u041e\u0441\u0442\u0430\u0442\u043e\u043a \u043d\u0430 \u043a\u043e\u043d\u0435\u0446 \u043f\u0435\u0440\u0438\u043e\u0434\u0430, \u20BD</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
+  h+='<tr><td class="lbl">\u041e\u0431\u043e\u0440\u0430\u0447\u0438\u0432\u0430\u0435\u043c\u043e\u0441\u0442\u044c, \u0434\u043d</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
+
   document.getElementById('tbl').className='';
-  document.getElementById('tbl').innerHTML = `
-    <table>
-<tr><th>Показатель</th><th>Нед.29 (13.07–19.07) (расчётно)</th><th>Нед.30 (20.07–26.07) (расчётно)</th><th>Нед.31 (27.07–02.08)</th><th>Нед.32 (03.08–09.08)</th><th>Нед.33 (10.08–16.08)</th><th>Нед.34 (17.08–23.08)</th><th>Нед.35 (24.08–30.08)</th><th>Нед.36 (31.08–06.09)</th><th>Нед.37 (07.09–13.09) (расчётно)</th><th>Нед.38 (14.09–20.09) (расчётно)</th><th>Нед.39 (21.09–27.09) (расчётно)</th><th>Нед.40 (28.09–04.10) (расчётно)</th></tr>
-${hscrollRowHtml(13)}
-
-<tr class="section"><td class="lbl">Объём</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="lbl">Заказы, шт</td><td>0</td><td>4</td><td>14</td><td>11</td><td>33</td><td>23</td><td>33</td><td>30</td><td>18</td><td>34</td><td>28</td><td>3</td></tr>
-<tr><td class="lbl">Продажи (выкупы), шт</td><td>0</td><td>0</td><td>2</td><td>1</td><td>4</td><td>14</td><td>10</td><td>2</td><td>6</td><td>20</td><td>8</td><td>0</td></tr>
-<tr><td class="lbl">Возвраты, шт</td><td>0</td><td>2</td><td>2</td><td>6</td><td>7</td><td>10</td><td>8</td><td>1</td><td>11</td><td>5</td><td>5</td><td>0</td></tr>
-<tr><td class="lbl">Выкупаемость, %</td><td>0,0%</td><td>0,0%</td><td>14,3%</td><td>9,1%</td><td>12,1%</td><td>60,9%</td><td>30,3%</td><td>6,7%</td><td>33,3%</td><td>58,8%</td><td>28,6%</td><td>0,0%</td></tr>
-<tr><td class="lbl">Средний чек наш (до СПП), ₽</td><td>0₽</td><td>0₽</td><td>16 500₽</td><td>17 300₽</td><td>11 988₽</td><td>11 125₽</td><td>12 245₽</td><td>13 158₽</td><td>17 573₽</td><td>11 944₽</td><td>13 176₽</td><td>0₽</td></tr>
-
-<tr class="section"><td class="lbl">Выручка</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="lbl">Выручка (до СПП)</td><td>0₽</td><td>0₽</td><td>33 000₽</td><td>17 300₽</td><td>47 950₽</td><td>155 749₽</td><td>122 449₽</td><td>26 317₽</td><td>105 437₽</td><td>238 871₽</td><td>105 409₽</td><td>0₽</td></tr>
-<tr><td class="lbl">Себестоимость</td><td>0₽</td><td>0₽</td><td>7 600₽<span class="pct">23,0%</span></td><td>3 800₽<span class="pct">22,0%</span></td><td>15 200₽<span class="pct">31,7%</span></td><td>53 200₽<span class="pct">34,2%</span></td><td>38 000₽<span class="pct">31,0%</span></td><td>7 600₽<span class="pct">28,9%</span></td><td>22 800₽<span class="pct">21,6%</span></td><td>76 000₽<span class="pct">31,8%</span></td><td>30 400₽<span class="pct">28,8%</span></td><td>0₽</td></tr>
-<tr class="total"><td class="lbl">Валовая прибыль (М1)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">25 400₽<span class="pct">77,0%</span></td><td class="pos">13 500₽<span class="pct">78,0%</span></td><td class="pos">32 750₽<span class="pct">68,3%</span></td><td class="pos">102 549₽<span class="pct">65,8%</span></td><td class="pos">84 449₽<span class="pct">69,0%</span></td><td class="pos">18 717₽<span class="pct">71,1%</span></td><td class="pos">82 637₽<span class="pct">78,4%</span></td><td class="pos">162 871₽<span class="pct">68,2%</span></td><td class="pos">75 009₽<span class="pct">71,2%</span></td><td class="pos">0₽</td></tr>
-
-<tr class="section"><td class="lbl">Переменные расходы МП</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="lbl">Комиссия МП</td><td>0₽</td><td>0₽</td><td>10 670₽<span class="pct">32,3%</span></td><td>7 092₽<span class="pct">41,0%</span></td><td>16 050₽<span class="pct">33,5%</span></td><td>65 154₽<span class="pct">41,8%</span></td><td>50 994₽<span class="pct">41,6%</span></td><td>11 005₽<span class="pct">41,8%</span></td><td>42 138₽<span class="pct">40,0%</span></td><td>95 464₽<span class="pct">40,0%</span></td><td>42 126₽<span class="pct">40,0%</span></td><td>0₽</td></tr>
-<tr><td class="lbl">Эквайринг</td><td>0₽</td><td>0₽</td><td>594₽<span class="pct">1,8%</span></td><td>311₽<span class="pct">1,8%</span></td><td>863₽<span class="pct">1,8%</span></td><td>2 803₽<span class="pct">1,8%</span></td><td>2 399₽<span class="pct">2,0%</span></td><td>474₽<span class="pct">1,8%</span></td><td>1 949₽<span class="pct">1,8%</span></td><td>4 416₽<span class="pct">1,8%</span></td><td>1 948₽<span class="pct">1,8%</span></td><td>0₽</td></tr>
-<tr><td class="lbl">Логистика до клиента</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td></tr>
-<tr><td class="lbl">Хранение</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td></tr>
-<tr><td class="lbl">Итого переменные расходы МП</td><td>0₽</td><td>0₽</td><td>11 264₽<span class="pct">34,1%</span></td><td>7 403₽<span class="pct">42,8%</span></td><td>16 913₽<span class="pct">35,3%</span></td><td>67 957₽<span class="pct">43,6%</span></td><td>53 393₽<span class="pct">43,6%</span></td><td>11 479₽<span class="pct">43,6%</span></td><td>44 087₽<span class="pct">41,8%</span></td><td>99 880₽<span class="pct">41,8%</span></td><td>44 075₽<span class="pct">41,8%</span></td><td>0₽</td></tr>
-<tr class="total"><td class="lbl">Маржинальная прибыль (М2)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">6 097₽<span class="pct">35,2%</span></td><td class="pos">15 837₽<span class="pct">33,0%</span></td><td class="pos">34 592₽<span class="pct">22,2%</span></td><td class="pos">31 056₽<span class="pct">25,4%</span></td><td class="pos">7 238₽<span class="pct">27,5%</span></td><td class="pos">38 550₽<span class="pct">36,6%</span></td><td class="pos">62 991₽<span class="pct">26,4%</span></td><td class="pos">30 934₽<span class="pct">29,3%</span></td><td class="pos">0₽</td></tr>
-
-<tr class="section"><td class="lbl">Продвижение</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="lbl">Реклама на МП (ДРР)</td><td>0₽</td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>18 728₽<span class="pct">71,2%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-<tr class="total"><td class="lbl">Маржинальная прибыль (М3)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">6 097₽<span class="pct">35,2%</span></td><td class="pos">15 837₽<span class="pct">33,0%</span></td><td class="pos">34 592₽<span class="pct">22,2%</span></td><td class="pos">31 056₽<span class="pct">25,4%</span></td><td class="neg">-11 490₽<span class="pct">-43,7%</span></td><td class="pos">38 550₽<span class="pct">36,6%</span></td><td class="pos">62 991₽<span class="pct">26,4%</span></td><td class="pos">30 934₽<span class="pct">29,3%</span></td><td class="pos">0₽</td></tr>
-
-<tr class="section"><td class="lbl">Прочее</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="lbl">Прочие расходы МП</td><td>0₽</td><td>138₽</td><td>138₽<span class="pct">0,4%</span></td><td>414₽<span class="pct">2,4%</span></td><td>483₽<span class="pct">1,0%</span></td><td>690₽<span class="pct">0,4%</span></td><td>552₽<span class="pct">0,5%</span></td><td>69₽<span class="pct">0,3%</span></td><td>759₽<span class="pct">0,7%</span></td><td>345₽<span class="pct">0,1%</span></td><td>345₽<span class="pct">0,3%</span></td><td>0₽</td></tr>
-<tr><td class="lbl">Склад / поставка (кросс-докинг и т.п.)</td><td>3 700₽</td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
-
-<tr class="section"><td class="lbl">Итог</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr class="total"><td class="lbl">Прибыль МП</td><td class="neg">-3 700₽</td><td class="neg">-138₽</td><td class="pos">13 998₽<span class="pct">42,4%</span></td><td class="pos">5 683₽<span class="pct">32,8%</span></td><td class="pos">15 354₽<span class="pct">32,0%</span></td><td class="pos">33 902₽<span class="pct">21,8%</span></td><td class="pos">30 504₽<span class="pct">24,9%</span></td><td class="neg">-11 558₽<span class="pct">-43,9%</span></td><td class="pos">37 791₽<span class="pct">35,8%</span></td><td class="pos">62 646₽<span class="pct">26,2%</span></td><td class="pos">30 589₽<span class="pct">29,0%</span></td><td class="pos">0₽</td></tr>
-<tr class="total"><td class="lbl">Чистая прибыль (ЧП)</td><td class="neg">-3 700₽</td><td class="neg">-138₽</td><td class="pos">13 998₽<span class="pct">42,4%</span></td><td class="pos">5 683₽<span class="pct">32,8%</span></td><td class="pos">15 354₽<span class="pct">32,0%</span></td><td class="pos">33 902₽<span class="pct">21,8%</span></td><td class="pos">30 504₽<span class="pct">24,9%</span></td><td class="neg">-11 558₽<span class="pct">-43,9%</span></td><td class="pos">37 791₽<span class="pct">35,8%</span></td><td class="pos">62 646₽<span class="pct">26,2%</span></td><td class="pos">30 589₽<span class="pct">29,0%</span></td><td class="pos">0₽</td></tr>
-    </table>
-    <div class="note" style="padding:10px 14px">
-      Статично, не живой запрос. Недели, отмеченные «(расчётно)» в шапке — период ещё не закрыт Lamoda
-      (нет «Расшифровки ПП»), цифры оценены по «Управление заказами» + средним ставкам подтверждённых недель
-      (методика та же, что в помесячной таблице). Остальные недели — факт из финансового отчёта.
-      Отрицательная «Прибыль МП» в отдельных неделях — реальный результат недели (например, вся реклама за
-      август разом легла в неделю документа УПД, 31.08–06.09), не ошибка.
-    </div>`;
-  requestAnimationFrame(()=>initHScroll('tbl'));
+  document.getElementById('tbl').innerHTML = '<table>'+h+'</table>'
+    +'<div class="note" style="padding:10px 14px">'
+    +'\u0421\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 (\u043d\u0435 \u0436\u0438\u0432\u043e\u0439 \u0437\u0430\u043f\u0440\u043e\u0441). \u041f\u0435\u0440\u0438\u043e\u0434\u044b \u0441 \u043f\u043e\u043c\u0435\u0442\u043a\u043e\u0439 \u00ab(\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)\u00bb \u2014 \u0435\u0449\u0451 \u043d\u0435 \u0437\u0430\u043a\u0440\u044b\u0442\u044b Lamoda '
+    +'(\u043d\u0435\u0442 \u00ab\u0420\u0430\u0441\u0448\u0438\u0444\u0440\u043e\u0432\u043a\u0438 \u041f\u041f\u00bb), \u043e\u0446\u0435\u043d\u0435\u043d\u044b \u043f\u043e \u00ab\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u0430\u0437\u0430\u043c\u0438\u00bb + \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0441\u0442\u0430\u0432\u043a\u0430\u043c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0445 '
+    +'\u043f\u0435\u0440\u0438\u043e\u0434\u043e\u0432. \u041e\u0441\u0442\u0430\u043b\u044c\u043d\u044b\u0435 \u2014 \u0444\u0430\u043a\u0442 \u0438\u0437 \u0444\u0438\u043d\u0430\u043d\u0441\u043e\u0432\u043e\u0433\u043e \u043e\u0442\u0447\u0451\u0442\u0430. \u041e\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u00ab\u041f\u0440\u0438\u0431\u044b\u043b\u044c \u041c\u041f\u00bb \u0432 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0445 '
+    +'\u043f\u0435\u0440\u0438\u043e\u0434\u0430\u0445 \u2014 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440, \u0432\u0441\u044f \u0440\u0435\u043a\u043b\u0430\u043c\u0430 \u0437\u0430 \u0430\u0432\u0433\u0443\u0441\u0442 \u0440\u0430\u0437\u043e\u043c \u043b\u0435\u0433\u043b\u0430 \u0432 \u043e\u0434\u0438\u043d \u043f\u0435\u0440\u0438\u043e\u0434), \u043d\u0435 \u043e\u0448\u0438\u0431\u043a\u0430.'
+    +'</div>';
+  requestAnimationFrame(function(){ initHScroll('tbl'); });
 }
+
 
 function setPeriod(p){
   PERIOD=p;
   if(MP==='lamoda'){
     document.getElementById('b-month').classList.toggle('on',p==='month');
     document.getElementById('b-week').classList.toggle('on',p==='week');
-    p==='week' ? renderLamodaWeekly() : renderLamodaStatic();
+    loadHiddenPeriods();
+    renderLamodaTable();
     return;
   }
   document.getElementById('b-month').classList.toggle('on',p==='month');
@@ -441,13 +438,13 @@ function periodPanelAll(show){
     if(show) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
   });
   saveHiddenPeriods();
-  renderTable();
+  MP==='lamoda' ? renderLamodaTable() : renderTable();
 }
 
 function onPeriodCheck(cb){
   if(cb.checked) HIDDEN_PERIODS.delete(cb.value); else HIDDEN_PERIODS.add(cb.value);
   saveHiddenPeriods();
-  renderTable();
+  MP==='lamoda' ? renderLamodaTable() : renderTable();
 }
 
 function setView(v){
