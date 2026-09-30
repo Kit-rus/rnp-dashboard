@@ -97,6 +97,7 @@ td.lbl2{text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis}
   <div class="mptabs">
     <button class="mpt on" id="b-ozon" onclick="setMP('ozon')">OZON</button>
     <button class="mpt"    id="b-wb"   onclick="setMP('wb')">WB</button>
+    <button class="mpt"    id="b-lamoda" onclick="setMP('lamoda')">Lamoda</button>
     <span style="width:1px;background:var(--border);margin:0 4px"></span>
     <button class="mpt on" id="b-view-pl"  onclick="setView('pl')">Фин. отчет</button>
     <button class="mpt"    id="b-view-abc" onclick="setView('abc')">ABC-анализ</button>
@@ -280,8 +281,73 @@ function setMP(mp){
   MP=mp;
   document.getElementById('b-ozon').classList.toggle('on',mp==='ozon');
   document.getElementById('b-wb').classList.toggle('on',mp==='wb');
+  document.getElementById('b-lamoda').classList.toggle('on',mp==='lamoda');
+  if(mp==='lamoda'){ renderLamodaStatic(); return; }
   loadHiddenPeriods();
   VIEW==='abc' ? loadABC() : load();
+}
+
+// Lamoda — статичная таблица, не живой запрос к Supabase: нет daily_metrics
+// (нет API-синка заказов/остатков), v_monthly_finance/v_weekly_finance для
+// marketplace='lamoda' дают 0 строк (проверено). Числа сверены вручную по
+// financial_transactions (source='lamoda') + Управление заказами.csv — см.
+// lamoda_finance_preview.html, откуда этот блок скопирован 1:1. Обновлять
+// руками при каждой новой «Расшифровке ПП», пока нет отдельной вьюхи.
+function renderLamodaStatic(){
+  document.getElementById('tbl').className='';
+  document.getElementById('tbl').innerHTML = `
+    <table>
+      <tr><th>Показатель</th><th>Июль 2026</th><th>Август 2026</th><th>Сентябрь 2026 (расчётно)</th><th>Итого</th></tr>
+
+      <tr class="section"><td colspan="5">Объём</td></tr>
+      <tr><td class="lbl">Заказы, шт</td><td>16</td><td>109</td><td>106</td><td>231</td></tr>
+      <tr><td class="lbl">Продажи (выкупы), шт</td><td>2</td><td>31</td><td>44</td><td>77</td></tr>
+      <tr><td class="lbl">Возвраты, шт</td><td>1</td><td>33</td><td>30</td><td>64</td></tr>
+      <tr><td class="lbl">Выкупаемость, %</td><td>12,5%</td><td>28,4%</td><td>41,5%</td><td>33,3%</td></tr>
+      <tr><td class="lbl">Средний чек наш (до СПП), ₽</td><td>16 500₽</td><td>11 928₽</td><td>13 341₽</td><td>12 854₽</td></tr>
+      <tr><td class="lbl">Средний чек клиента (после СПП), ₽</td><td>16 500₽</td><td>11 928₽</td><td>13 341₽</td><td>12 854₽</td></tr>
+      <tr><td class="lbl">Средний уровень СПП, %</td><td>0,0%</td><td>0,0%</td><td>0,0%</td><td>0,0%</td></tr>
+
+      <tr class="section"><td colspan="5">Выручка</td></tr>
+      <tr><td class="lbl">Выручка (до СПП)</td><td>33 000₽</td><td>369 765₽</td><td>587 013₽</td><td>989 778₽</td></tr>
+      <tr><td class="lbl">Выручка после СПП</td><td>33 000₽</td><td>369 765₽</td><td>587 013₽</td><td>989 778₽</td></tr>
+      <tr><td class="lbl">Себестоимость</td><td>7 600₽<span class="pct">23,0%</span></td><td>117 800₽<span class="pct">31,9%</span></td><td>167 200₽<span class="pct">28,5%</span></td><td>292 600₽<span class="pct">29,6%</span></td></tr>
+      <tr class="total"><td class="lbl">Валовая прибыль (М1)</td><td class="pos">25 400₽<span class="pct">77,0%</span></td><td class="pos">251 965₽<span class="pct">68,1%</span></td><td class="pos">419 813₽<span class="pct">71,5%</span></td><td class="pos">697 178₽<span class="pct">70,4%</span></td></tr>
+
+      <tr class="section"><td colspan="5">Переменные расходы МП</td></tr>
+      <tr><td class="lbl">Комиссия МП</td><td>10 670₽<span class="pct">32,3%</span></td><td>150 294₽<span class="pct">40,6%</span></td><td>234 598₽<span class="pct">40,0%</span></td><td>395 562₽<span class="pct">40,0%</span></td></tr>
+      <tr><td class="lbl">Эквайринг</td><td>594₽<span class="pct">1,8%</span></td><td>6 851₽<span class="pct">1,9%</span></td><td>10 851₽<span class="pct">1,8%</span></td><td>18 296₽<span class="pct">1,8%</span></td></tr>
+      <tr><td class="lbl">Логистика до клиента</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr><td class="lbl">Логистика от клиента (возвраты)</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr><td class="lbl">Хранение</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr><td class="lbl">Итого переменные расходы МП</td><td>11 264₽<span class="pct">34,1%</span></td><td>157 145₽<span class="pct">42,5%</span></td><td>245 449₽<span class="pct">41,8%</span></td><td>413 858₽<span class="pct">41,8%</span></td></tr>
+      <tr class="total"><td class="lbl">Маржинальная прибыль (М2)</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">94 820₽<span class="pct">25,6%</span></td><td class="pos">174 364₽<span class="pct">29,7%</span></td><td class="pos">283 320₽<span class="pct">28,6%</span></td></tr>
+
+      <tr class="section"><td colspan="5">Продвижение</td></tr>
+      <tr><td class="lbl">Реклама на МП (ДРР)</td><td>0₽<span class="pct">0,0%</span></td><td>18 728₽<span class="pct">5,1%</span></td><td>0₽</td><td>18 728₽<span class="pct">1,9%</span></td></tr>
+      <tr><td class="lbl">Самовыкупы</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr><td class="lbl">Блогеры</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr><td class="lbl">Инструменты менеджера</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td></tr>
+      <tr class="total"><td class="lbl">Маржинальная прибыль (М3)</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">76 092₽<span class="pct">20,6%</span></td><td class="pos">174 364₽<span class="pct">29,7%</span></td><td class="pos">264 592₽<span class="pct">26,7%</span></td></tr>
+
+      <tr class="section"><td colspan="5">Прочее</td></tr>
+      <tr><td class="lbl">Прочие расходы МП</td><td>69₽<span class="pct">0,2%</span></td><td>2 277₽<span class="pct">0,6%</span></td><td>2 070₽<span class="pct">0,4%</span></td><td>4 416₽<span class="pct">0,4%</span></td></tr>
+      <tr><td class="lbl">Склад / поставка (кросс-докинг и т.п.)</td><td>3 700₽<span class="pct">11,2%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td><td>3 700₽<span class="pct">0,4%</span></td></tr>
+
+      <tr class="section"><td colspan="5">Итог</td></tr>
+      <tr class="total"><td class="lbl">Прибыль МП</td><td class="pos">10 367₽<span class="pct">31,4%</span></td><td class="pos">73 815₽<span class="pct">20,0%</span></td><td class="pos">172 294₽<span class="pct">29,4%</span></td><td class="pos">256 476₽<span class="pct">25,9%</span></td></tr>
+      <tr class="total"><td class="lbl">Чистая прибыль (ЧП)</td><td class="pos">10 367₽<span class="pct">31,4%</span></td><td class="pos">73 815₽<span class="pct">20,0%</span></td><td class="pos">172 294₽<span class="pct">29,4%</span></td><td class="pos">256 476₽<span class="pct">25,9%</span></td></tr>
+
+      <tr class="section"><td colspan="5">Запасы</td></tr>
+      <tr><td class="lbl">Остаток на конец периода, шт</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td class="lbl">Остаток на конец периода, ₽</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td class="lbl">Оборачиваемость, дн</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    </table>
+    <div class="note" style="padding:10px 14px">
+      Статично, не живой запрос (нет daily_metrics для Lamoda — v_monthly_finance даёт 0 строк). Июль/август —
+      факт из «Расшифровка ПП»/«Отчёт комиссионера»/«Расшифровка услуг». Сентябрь — расчётно по
+      «Управление заказами» (см. lamoda_finance_preview.html за методикой). Обновляется вручную.
+    </div>`;
 }
 
 function setPeriod(p){
