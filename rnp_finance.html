@@ -303,6 +303,7 @@ function renderLamodaStatic(){
   document.getElementById('tbl').innerHTML = `
     <table>
       <tr><th>Показатель</th><th>Июль 2026</th><th>Август 2026</th><th>Сентябрь 2026 (расчётно)</th></tr>
+      ${hscrollRowHtml(5)}
 
       <tr class="section"><td class="lbl">Объём</td><td></td><td></td><td></td></tr>
       <tr><td class="lbl">Заказы, шт</td><td>16</td><td>109</td><td>106</td></tr>
@@ -353,6 +354,7 @@ function renderLamodaStatic(){
       факт из «Расшифровка ПП»/«Отчёт комиссионера»/«Расшифровка услуг». Сентябрь — расчётно по
       «Управление заказами» (см. lamoda_finance_preview.html за методикой). Обновляется вручную.
     </div>`;
+  requestAnimationFrame(()=>initHScroll('tbl'));
 }
 
 function renderLamodaWeekly(){
@@ -360,6 +362,7 @@ function renderLamodaWeekly(){
   document.getElementById('tbl').innerHTML = `
     <table>
 <tr><th>Показатель</th><th>Нед.29 (13.07–19.07) (расчётно)</th><th>Нед.30 (20.07–26.07) (расчётно)</th><th>Нед.31 (27.07–02.08)</th><th>Нед.32 (03.08–09.08)</th><th>Нед.33 (10.08–16.08)</th><th>Нед.34 (17.08–23.08)</th><th>Нед.35 (24.08–30.08)</th><th>Нед.36 (31.08–06.09)</th><th>Нед.37 (07.09–13.09) (расчётно)</th><th>Нед.38 (14.09–20.09) (расчётно)</th><th>Нед.39 (21.09–27.09) (расчётно)</th><th>Нед.40 (28.09–04.10) (расчётно)</th></tr>
+${hscrollRowHtml(13)}
 
 <tr class="section"><td class="lbl">Объём</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
 <tr><td class="lbl">Заказы, шт</td><td>0</td><td>4</td><td>14</td><td>11</td><td>33</td><td>23</td><td>33</td><td>30</td><td>18</td><td>34</td><td>28</td><td>3</td></tr>
@@ -400,6 +403,7 @@ function renderLamodaWeekly(){
       Отрицательная «Прибыль МП» в отдельных неделях — реальный результат недели (например, вся реклама за
       август разом легла в неделю документа УПД, 31.08–06.09), не ошибка.
     </div>`;
+  requestAnimationFrame(()=>initHScroll('tbl'));
 }
 
 function setPeriod(p){
