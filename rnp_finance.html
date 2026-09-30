@@ -282,6 +282,12 @@ function setMP(mp){
   document.getElementById('b-ozon').classList.toggle('on',mp==='ozon');
   document.getElementById('b-wb').classList.toggle('on',mp==='wb');
   document.getElementById('b-lamoda').classList.toggle('on',mp==='lamoda');
+  // У Lamoda нет понедельной разбивки (только статичная месячная таблица) — кнопка
+  // "Неделя" физически неактивна, а не молча без эффекта.
+  const bWeek=document.getElementById('b-week');
+  bWeek.disabled = (mp==='lamoda');
+  bWeek.style.opacity = (mp==='lamoda') ? '0.4' : '';
+  bWeek.style.cursor = (mp==='lamoda') ? 'not-allowed' : '';
   if(mp==='lamoda'){ renderLamodaStatic(); return; }
   loadHiddenPeriods();
   VIEW==='abc' ? loadABC() : load();
