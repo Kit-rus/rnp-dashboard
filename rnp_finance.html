@@ -282,13 +282,12 @@ function setMP(mp){
   document.getElementById('b-ozon').classList.toggle('on',mp==='ozon');
   document.getElementById('b-wb').classList.toggle('on',mp==='wb');
   document.getElementById('b-lamoda').classList.toggle('on',mp==='lamoda');
-  // У Lamoda нет понедельной разбивки (только статичная месячная таблица) — кнопка
-  // "Неделя" физически неактивна, а не молча без эффекта.
-  const bWeek=document.getElementById('b-week');
-  bWeek.disabled = (mp==='lamoda');
-  bWeek.style.opacity = (mp==='lamoda') ? '0.4' : '';
-  bWeek.style.cursor = (mp==='lamoda') ? 'not-allowed' : '';
-  if(mp==='lamoda'){ renderLamodaStatic(); return; }
+  if(mp==='lamoda'){
+    document.getElementById('b-month').classList.toggle('on',PERIOD==='month');
+    document.getElementById('b-week').classList.toggle('on',PERIOD==='week');
+    PERIOD==='week' ? renderLamodaWeekly() : renderLamodaStatic();
+    return;
+  }
   loadHiddenPeriods();
   VIEW==='abc' ? loadABC() : load();
 }
@@ -356,15 +355,61 @@ function renderLamodaStatic(){
     </div>`;
 }
 
+function renderLamodaWeekly(){
+  document.getElementById('tbl').className='';
+  document.getElementById('tbl').innerHTML = `
+    <table>
+<tr><th>Показатель</th><th>Нед.29 (13.07–19.07) (расчётно)</th><th>Нед.30 (20.07–26.07) (расчётно)</th><th>Нед.31 (27.07–02.08)</th><th>Нед.32 (03.08–09.08)</th><th>Нед.33 (10.08–16.08)</th><th>Нед.34 (17.08–23.08)</th><th>Нед.35 (24.08–30.08)</th><th>Нед.36 (31.08–06.09)</th><th>Нед.37 (07.09–13.09) (расчётно)</th><th>Нед.38 (14.09–20.09) (расчётно)</th><th>Нед.39 (21.09–27.09) (расчётно)</th><th>Нед.40 (28.09–04.10) (расчётно)</th></tr>
+
+<tr class="section"><td class="lbl">Объём</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td class="lbl">Заказы, шт</td><td>0</td><td>4</td><td>14</td><td>11</td><td>33</td><td>23</td><td>33</td><td>30</td><td>18</td><td>34</td><td>28</td><td>3</td></tr>
+<tr><td class="lbl">Продажи (выкупы), шт</td><td>0</td><td>0</td><td>2</td><td>1</td><td>4</td><td>14</td><td>10</td><td>2</td><td>6</td><td>20</td><td>8</td><td>0</td></tr>
+<tr><td class="lbl">Возвраты, шт</td><td>0</td><td>2</td><td>2</td><td>6</td><td>7</td><td>10</td><td>8</td><td>1</td><td>11</td><td>5</td><td>5</td><td>0</td></tr>
+<tr><td class="lbl">Выкупаемость, %</td><td>0,0%</td><td>0,0%</td><td>14,3%</td><td>9,1%</td><td>12,1%</td><td>60,9%</td><td>30,3%</td><td>6,7%</td><td>33,3%</td><td>58,8%</td><td>28,6%</td><td>0,0%</td></tr>
+<tr><td class="lbl">Средний чек наш (до СПП), ₽</td><td>0₽</td><td>0₽</td><td>16 500₽</td><td>17 300₽</td><td>11 988₽</td><td>11 125₽</td><td>12 245₽</td><td>13 158₽</td><td>17 573₽</td><td>11 944₽</td><td>13 176₽</td><td>0₽</td></tr>
+
+<tr class="section"><td class="lbl">Выручка</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td class="lbl">Выручка (до СПП)</td><td>0₽</td><td>0₽</td><td>33 000₽</td><td>17 300₽</td><td>47 950₽</td><td>155 749₽</td><td>122 449₽</td><td>26 317₽</td><td>105 437₽</td><td>238 871₽</td><td>105 409₽</td><td>0₽</td></tr>
+<tr><td class="lbl">Себестоимость</td><td>0₽</td><td>0₽</td><td>7 600₽<span class="pct">23,0%</span></td><td>3 800₽<span class="pct">22,0%</span></td><td>15 200₽<span class="pct">31,7%</span></td><td>53 200₽<span class="pct">34,2%</span></td><td>38 000₽<span class="pct">31,0%</span></td><td>7 600₽<span class="pct">28,9%</span></td><td>22 800₽<span class="pct">21,6%</span></td><td>76 000₽<span class="pct">31,8%</span></td><td>30 400₽<span class="pct">28,8%</span></td><td>0₽</td></tr>
+<tr class="total"><td class="lbl">Валовая прибыль (М1)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">25 400₽<span class="pct">77,0%</span></td><td class="pos">13 500₽<span class="pct">78,0%</span></td><td class="pos">32 750₽<span class="pct">68,3%</span></td><td class="pos">102 549₽<span class="pct">65,8%</span></td><td class="pos">84 449₽<span class="pct">69,0%</span></td><td class="pos">18 717₽<span class="pct">71,1%</span></td><td class="pos">82 637₽<span class="pct">78,4%</span></td><td class="pos">162 871₽<span class="pct">68,2%</span></td><td class="pos">75 009₽<span class="pct">71,2%</span></td><td class="pos">0₽</td></tr>
+
+<tr class="section"><td class="lbl">Переменные расходы МП</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td class="lbl">Комиссия МП</td><td>0₽</td><td>0₽</td><td>10 670₽<span class="pct">32,3%</span></td><td>7 092₽<span class="pct">41,0%</span></td><td>16 050₽<span class="pct">33,5%</span></td><td>65 154₽<span class="pct">41,8%</span></td><td>50 994₽<span class="pct">41,6%</span></td><td>11 005₽<span class="pct">41,8%</span></td><td>42 138₽<span class="pct">40,0%</span></td><td>95 464₽<span class="pct">40,0%</span></td><td>42 126₽<span class="pct">40,0%</span></td><td>0₽</td></tr>
+<tr><td class="lbl">Эквайринг</td><td>0₽</td><td>0₽</td><td>594₽<span class="pct">1,8%</span></td><td>311₽<span class="pct">1,8%</span></td><td>863₽<span class="pct">1,8%</span></td><td>2 803₽<span class="pct">1,8%</span></td><td>2 399₽<span class="pct">2,0%</span></td><td>474₽<span class="pct">1,8%</span></td><td>1 949₽<span class="pct">1,8%</span></td><td>4 416₽<span class="pct">1,8%</span></td><td>1 948₽<span class="pct">1,8%</span></td><td>0₽</td></tr>
+<tr><td class="lbl">Логистика до клиента</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td></tr>
+<tr><td class="lbl">Хранение</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td><td>0₽</td></tr>
+<tr><td class="lbl">Итого переменные расходы МП</td><td>0₽</td><td>0₽</td><td>11 264₽<span class="pct">34,1%</span></td><td>7 403₽<span class="pct">42,8%</span></td><td>16 913₽<span class="pct">35,3%</span></td><td>67 957₽<span class="pct">43,6%</span></td><td>53 393₽<span class="pct">43,6%</span></td><td>11 479₽<span class="pct">43,6%</span></td><td>44 087₽<span class="pct">41,8%</span></td><td>99 880₽<span class="pct">41,8%</span></td><td>44 075₽<span class="pct">41,8%</span></td><td>0₽</td></tr>
+<tr class="total"><td class="lbl">Маржинальная прибыль (М2)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">6 097₽<span class="pct">35,2%</span></td><td class="pos">15 837₽<span class="pct">33,0%</span></td><td class="pos">34 592₽<span class="pct">22,2%</span></td><td class="pos">31 056₽<span class="pct">25,4%</span></td><td class="pos">7 238₽<span class="pct">27,5%</span></td><td class="pos">38 550₽<span class="pct">36,6%</span></td><td class="pos">62 991₽<span class="pct">26,4%</span></td><td class="pos">30 934₽<span class="pct">29,3%</span></td><td class="pos">0₽</td></tr>
+
+<tr class="section"><td class="lbl">Продвижение</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td class="lbl">Реклама на МП (ДРР)</td><td>0₽</td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>18 728₽<span class="pct">71,2%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
+<tr class="total"><td class="lbl">Маржинальная прибыль (М3)</td><td class="pos">0₽</td><td class="pos">0₽</td><td class="pos">14 136₽<span class="pct">42,8%</span></td><td class="pos">6 097₽<span class="pct">35,2%</span></td><td class="pos">15 837₽<span class="pct">33,0%</span></td><td class="pos">34 592₽<span class="pct">22,2%</span></td><td class="pos">31 056₽<span class="pct">25,4%</span></td><td class="neg">-11 490₽<span class="pct">-43,7%</span></td><td class="pos">38 550₽<span class="pct">36,6%</span></td><td class="pos">62 991₽<span class="pct">26,4%</span></td><td class="pos">30 934₽<span class="pct">29,3%</span></td><td class="pos">0₽</td></tr>
+
+<tr class="section"><td class="lbl">Прочее</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td class="lbl">Прочие расходы МП</td><td>0₽</td><td>138₽</td><td>138₽<span class="pct">0,4%</span></td><td>414₽<span class="pct">2,4%</span></td><td>483₽<span class="pct">1,0%</span></td><td>690₽<span class="pct">0,4%</span></td><td>552₽<span class="pct">0,5%</span></td><td>69₽<span class="pct">0,3%</span></td><td>759₽<span class="pct">0,7%</span></td><td>345₽<span class="pct">0,1%</span></td><td>345₽<span class="pct">0,3%</span></td><td>0₽</td></tr>
+<tr><td class="lbl">Склад / поставка (кросс-докинг и т.п.)</td><td>3 700₽</td><td>0₽</td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽<span class="pct">0,0%</span></td><td>0₽</td></tr>
+
+<tr class="section"><td class="lbl">Итог</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr class="total"><td class="lbl">Прибыль МП</td><td class="neg">-3 700₽</td><td class="neg">-138₽</td><td class="pos">13 998₽<span class="pct">42,4%</span></td><td class="pos">5 683₽<span class="pct">32,8%</span></td><td class="pos">15 354₽<span class="pct">32,0%</span></td><td class="pos">33 902₽<span class="pct">21,8%</span></td><td class="pos">30 504₽<span class="pct">24,9%</span></td><td class="neg">-11 558₽<span class="pct">-43,9%</span></td><td class="pos">37 791₽<span class="pct">35,8%</span></td><td class="pos">62 646₽<span class="pct">26,2%</span></td><td class="pos">30 589₽<span class="pct">29,0%</span></td><td class="pos">0₽</td></tr>
+<tr class="total"><td class="lbl">Чистая прибыль (ЧП)</td><td class="neg">-3 700₽</td><td class="neg">-138₽</td><td class="pos">13 998₽<span class="pct">42,4%</span></td><td class="pos">5 683₽<span class="pct">32,8%</span></td><td class="pos">15 354₽<span class="pct">32,0%</span></td><td class="pos">33 902₽<span class="pct">21,8%</span></td><td class="pos">30 504₽<span class="pct">24,9%</span></td><td class="neg">-11 558₽<span class="pct">-43,9%</span></td><td class="pos">37 791₽<span class="pct">35,8%</span></td><td class="pos">62 646₽<span class="pct">26,2%</span></td><td class="pos">30 589₽<span class="pct">29,0%</span></td><td class="pos">0₽</td></tr>
+    </table>
+    <div class="note" style="padding:10px 14px">
+      Статично, не живой запрос. Недели, отмеченные «(расчётно)» в шапке — период ещё не закрыт Lamoda
+      (нет «Расшифровки ПП»), цифры оценены по «Управление заказами» + средним ставкам подтверждённых недель
+      (методика та же, что в помесячной таблице). Остальные недели — факт из финансового отчёта.
+      Отрицательная «Прибыль МП» в отдельных неделях — реальный результат недели (например, вся реклама за
+      август разом легла в неделю документа УПД, 31.08–06.09), не ошибка.
+    </div>`;
+}
+
 function setPeriod(p){
+  PERIOD=p;
   if(MP==='lamoda'){
-    // Lamoda — только месячные данные (нет понедельной разбивки), недельная кнопка не должна
-    // ломать статичную таблицу живым запросом к пустой вьюхе — оставляем "Месяц" выбранным.
-    document.getElementById('b-month').classList.toggle('on',true);
-    document.getElementById('b-week').classList.toggle('on',false);
+    document.getElementById('b-month').classList.toggle('on',p==='month');
+    document.getElementById('b-week').classList.toggle('on',p==='week');
+    p==='week' ? renderLamodaWeekly() : renderLamodaStatic();
     return;
   }
-  PERIOD=p;
   document.getElementById('b-month').classList.toggle('on',p==='month');
   document.getElementById('b-week').classList.toggle('on',p==='week');
   loadHiddenPeriods(); // у месяцев и недель разные ключи периодов — своя сохранённая настройка на каждый
