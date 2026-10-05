@@ -88,7 +88,19 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .mrow{display:flex;gap:4px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px}
 .mt{font-size:11px;padding:4px 11px;border-radius:14px;border:0.5px solid var(--color-border-secondary);background:transparent;cursor:pointer;color:var(--color-text-secondary);white-space:nowrap;font-family:var(--font-sans)}
 .mt.on{background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)}
-.tbl-wrap{overflow-x:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg)}
+.tbl-wrap{overflow:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg)}
+/* Верх РНП (тулбар, KPI, фильтры метрик) + шапка таблицы с днями недели не уезжают
+   при вертикальной прокрутке: страница = колонка на всю высоту окна, верх фиксирован,
+   таблица прокручивается внутри своего контейнера (шапка/бегунок — sticky внутри него).
+   Раньше .tbl-wrap имел overflow-x:auto без ограничения высоты, поэтому вертикальный
+   sticky у шапки не мог сработать — скроллилась вся страница. */
+@media(min-width:801px){
+  #app{height:100vh}
+  .w{height:100%;display:flex;flex-direction:column}
+  #top-part{flex:none;max-height:45vh;overflow-y:auto}
+  .tbl-wrap{flex:1 1 auto;min-height:0}
+}
+@media(max-width:800px){.tbl-wrap{max-height:75vh}}
 table.main{border-collapse:collapse;width:100%;font-size:11px}
 table.main th.s0,table.main td.s0{position:sticky;left:0;z-index:3;background:var(--color-background-primary);min-width:64px;max-width:64px;width:64px}
 table.main th.s1,table.main td.s1{position:sticky;left:64px;z-index:3;background:var(--color-background-primary);min-width:220px;max-width:220px;width:220px}
@@ -100,8 +112,18 @@ table.main thead th{font-size:10px;color:var(--color-text-tertiary);font-weight:
    эффекта) — нет. На скролле страницы шапка рвалась ровно на стыке между
    ними — видимая "ступенька". Полноценный вертикальный sticky не просили,
    просто убираем top отдельно для этих трёх, оставляя левый sticky как есть. */
-table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{top:auto}
-table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{z-index:4;text-align:left}
+/* Шапка: 3 sticky-строки внутри .tbl-wrap — (1) Нед./Артикул, (2) дни недели,
+   (3) бегунок прокрутки. top второй и третьей строк = высота строк выше (JS ставит
+   --h1 / --h12 в initMainTableScroll). Левые столбцы шапки (s0-s2) — выше всех. */
+table.main thead th{position:sticky;top:0;z-index:5}
+table.main thead tr.hdr-r2 th{top:var(--h1,28px)}
+table.main thead th.s0,table.main thead th.s1,table.main thead th.s2{top:0;z-index:7;text-align:left}
+table.main thead tr.hdr-r3 th{top:var(--h12,56px);padding:0;background:var(--color-background-primary);text-align:left;border-bottom:0.5px solid var(--color-border-tertiary)}
+.hs-wrap{position:sticky;left:0;padding:4px 8px;box-sizing:border-box}
+.hs-track{height:10px;background:var(--color-border-tertiary);border-radius:5px;position:relative;cursor:pointer;opacity:.6;transition:opacity .15s}
+.hs-track:hover,.hs-track.dragging{opacity:1}
+.hs-thumb{position:absolute;top:0;left:0;height:10px;min-width:30px;background:#4f8cff;border-radius:5px;cursor:grab}
+.hs-thumb:active{cursor:grabbing}
 table.main thead th.plan-col{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
 table.main thead th.day-hdr{min-width:34px}
 table.main thead th.wk-hdr{background:var(--color-background-secondary);font-size:9px;color:var(--color-text-tertiary);border-left:1px solid var(--color-border-tertiary);border-right:1px solid var(--color-border-tertiary)}
@@ -285,6 +307,7 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
 <div id="app">
 <div class="w">
 
+<div id="top-part">
 <div class="topbar">
   <div style="display:flex;align-items:center;gap:8px">
     <div class="mptabs">
@@ -386,6 +409,7 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
   <button class="mt"    onclick="sM('logi',this)">Логистика ₽</button>
   <button class="mt"    onclick="sM('logiPct',this)">Логистика %</button>
 </div>
+</div><!-- /top-part -->
 
 <div class="tbl-wrap">
   <div id="tbl-container" style="padding:20px;color:#999;font-size:12px">Загрузка...</div>
@@ -790,10 +814,25 @@ function buildArticles(rows){
 // артикулу без хвостового размера): "T55поло серый-бордовый/44" -> "T55поло серый-бордовый".
 function colorModel(sellerArticle){
   const idx=sellerArticle.lastIndexOf('/');
-  if(idx<0) return sellerArticle;
-  const size=sellerArticle.slice(idx+1).trim();
-  if(size.length<=6) return sellerArticle.slice(0,idx).trim();
-  return sellerArticle;
+  let base=sellerArticle;
+  if(idx>=0){
+    const size=sellerArticle.slice(idx+1).trim();
+    if(size.length<=6) base=sellerArticle.slice(0,idx).trim();
+  }
+  // Найдено 01.10.2026: часть OZON-артикулов кодирует размер БЕЗ "/" — пробелом,
+  // дефисом или вообще слитно в конце строки ("А2451(110) белый 46",
+  // "А2319(105) антрацит - капюшон60", "A23F070(116)бежевый-капюшон-44").
+  // Старая логика (только "/") считала каждый такой размер отдельной
+  // цветомоделью — 554 "групп" вместо реальных 194 на одних и тех же данных.
+  // Диапазон 34-80 — реальные размеры одежды в каталоге (проверено на всех
+  // текущих OZON seller_article), не захватывает коды вида "(105)"/"(110)"
+  // (те не в конце строки) и не ломает "RSTU-138-10" (10 вне диапазона).
+  const m=base.match(/[\s-]*(\d{2})$/);
+  if(m){
+    const sz=+m[1];
+    if(sz>=34 && sz<=80) base=base.slice(0, base.length-m[0].length).replace(/[\s-]+$/,'').trim();
+  }
+  return base;
 }
 
 function buildKPI(rows,mp){
@@ -1989,7 +2028,7 @@ function render(){
   });
   html+=`<th rowspan="2" style="min-width:52px;text-align:center">Тренд</th>
     <th rowspan="2" style="min-width:34px;text-align:center">WoW</th>
-  </tr><tr>`;
+  </tr><tr class="hdr-r2">`;
   weekGroups.forEach((wg,wi)=>{
     const collapsed=!!WEEK_COLLAPSED[wg.wk];
     html+=`<th class="day-hdr wk-total-hdr${wi>0?' wk-sep':''}" style="min-width:${CM==='all'?'96px':'44px'}">Итого</th>`;
@@ -2000,7 +2039,10 @@ function render(){
       </th>`;
     });
   });
-  html+=`</tr></thead><tbody>`;
+  // Всего столбцов: 3 левых + (Итого нед. + дни) по неделям + Тренд + WoW — нужно для colspan бегунка
+  let hsCols=5;
+  weekGroups.forEach(wg=>{hsCols+=1+(WEEK_COLLAPSED[wg.wk]?0:wg.days.length);});
+  html+=`</tr><tr class="hdr-r3"><th colspan="${hsCols}"><div class="hs-wrap"><div class="hs-track"><div class="hs-thumb"></div></div></div></th></tr></thead><tbody>`;
 
   const dayTotals=days.map(()=>0);
   const dayTotalsAll=days.map(()=>({ord:0,sls:0,rev:0,ret:0,spend:0,comm:0,logi:0,acq:0,cogs:0,ftrev:0,mrev:0,
@@ -2343,6 +2385,73 @@ function render(){
   html+=`<td></td><td></td></tr>`;
   html+=`</tbody></table>`;
   document.getElementById('tbl-container').innerHTML=html;
+  initMainTableScroll();
+}
+
+// Бегунок горизонтальной прокрутки под днями недели + высоты sticky-строк шапки.
+// Контейнер прокрутки — .tbl-wrap; сам бегунок лежит в третьей строке thead (sticky),
+// внутренний .hs-wrap залипает слева и по ширине равен видимой области, поэтому
+// трек всегда на виду, а thumb отражает позицию прокрутки. При каждом ре-рендере
+// таблицы DOM бегунка пересоздаётся, а wrap и window — нет: прошлые обработчики
+// снимаем, иначе они копились бы на каждый рендер.
+function initMainTableScroll(){
+  const wrap=document.querySelector('.tbl-wrap');
+  const table=wrap&&wrap.querySelector('table.main');
+  if(!table) return;
+  const hsWrap=table.querySelector('.hs-wrap');
+  const track=table.querySelector('.hs-track');
+  const thumb=table.querySelector('.hs-thumb');
+  const rows=table.querySelectorAll('thead tr');
+  if(!hsWrap||!track||!thumb||rows.length<3) return;
+
+  function update(){
+    const h1=rows[0].offsetHeight, h2=rows[1].offsetHeight;
+    wrap.style.setProperty('--h1',h1+'px');
+    wrap.style.setProperty('--h12',(h1+h2)+'px');
+    const vis=wrap.clientWidth, content=table.scrollWidth;
+    hsWrap.style.width=vis+'px';
+    if(content<=vis+1){ track.style.visibility='hidden'; return; }
+    track.style.visibility='visible';
+    const trackW=track.clientWidth;
+    const thumbW=Math.max(30, trackW*vis/content);
+    const maxThumb=trackW-thumbW;
+    const maxScroll=content-vis;
+    thumb.style.width=thumbW+'px';
+    thumb.style.left=(maxScroll>0 ? wrap.scrollLeft/maxScroll*maxThumb : 0)+'px';
+  }
+
+  if(wrap._hsScroll) wrap.removeEventListener('scroll', wrap._hsScroll);
+  if(wrap._hsResize) window.removeEventListener('resize', wrap._hsResize);
+  if(wrap._hsMove) document.removeEventListener('mousemove', wrap._hsMove);
+  if(wrap._hsUp) document.removeEventListener('mouseup', wrap._hsUp);
+  wrap.addEventListener('scroll', update);
+  window.addEventListener('resize', update);
+  wrap._hsScroll=update; wrap._hsResize=update;
+
+  let dragging=false, startX=0, startScroll=0;
+  thumb.addEventListener('mousedown', e=>{
+    dragging=true; startX=e.clientX; startScroll=wrap.scrollLeft;
+    track.classList.add('dragging'); e.preventDefault();
+  });
+  const onMove=e=>{
+    if(!dragging) return;
+    const vis=wrap.clientWidth, content=table.scrollWidth;
+    const trackW=track.clientWidth;
+    const thumbW=Math.max(30, trackW*vis/content);
+    const maxThumb=(trackW-thumbW)||1;
+    wrap.scrollLeft=startScroll+(e.clientX-startX)/maxThumb*(content-vis);
+  };
+  const onUp=()=>{ if(dragging){dragging=false;track.classList.remove('dragging');} };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  wrap._hsMove=onMove; wrap._hsUp=onUp;
+  track.addEventListener('click', e=>{
+    if(e.target===thumb) return;
+    const r=track.getBoundingClientRect();
+    wrap.scrollLeft=(e.clientX-r.left)/track.clientWidth*(table.scrollWidth-wrap.clientWidth);
+  });
+
+  update();
 }
 
 // ─── Auth listener ────────────────────────────────────────────
