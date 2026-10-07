@@ -152,6 +152,10 @@ td.lbl2{text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis}
         <option value="category">По категории</option>
       </select>
       <button class="go" onclick="loadABC()">Построить</button>
+      <span style="display:inline-flex;gap:6px;margin-left:8px">
+        <button class="mpt on" id="abc-m-total" onclick="setABCUnit(false)">Всего</button>
+        <button class="mpt" id="abc-m-unit" onclick="setABCUnit(true)" title="Деньги делятся на число подтверждённых продаж (штук) по каждой строке">На 1 продажу</button>
+      </span>
     </div>
     <div id="abc-summary" class="summary"></div>
     <div class="card"><div id="abc-tbl" class="loading">Выбери период и нажми «Построить»</div></div>
@@ -585,6 +589,21 @@ async function loadABC(){
 // сортировки, только переупорядочиваем и перерисовываем — быстро, без похода в БД).
 let ABC_LIST=[];
 let ABC_SORT={field:'revenue',dir:'desc'};
+// Режим "на 1 продажу": денежные столбцы делятся на число подтверждённых продаж (g.buyouts) строки.
+// Счётчики (заказы/отменено/продажи), проценты (Выкуп %, Доля %, ЧП %) и "Ср.чек" не меняются.
+// У строк без продаж (buyouts=0) значения в этом режиме не определены — показываем "—".
+let ABC_UNIT=false;
+const ABC_MONEY_KEYS=new Set(['revenue','cogs','grossProfit','commission','logiAcq','storage','spend','netProfit']);
+function abcVal(g,key){
+  if(ABC_UNIT && ABC_MONEY_KEYS.has(key)) return g.buyouts>0 ? g[key]/g.buyouts : null;
+  return g[key];
+}
+function setABCUnit(on){
+  ABC_UNIT=!!on;
+  document.getElementById('abc-m-total').classList.toggle('on',!ABC_UNIT);
+  document.getElementById('abc-m-unit').classList.toggle('on',ABC_UNIT);
+  if(ABC_LIST.length) renderABCTable();
+}
 const ABC_COLS=[
   {key:'name',        label:'Название',        type:'str'},
   {key:'orders',       label:'Заказы'},
@@ -617,8 +636,15 @@ function renderABCTable(){
   const col=ABC_COLS.find(c=>c.key===field);
   const isStr=col&&col.type==='str';
   const sorted=ABC_LIST.slice().sort((a,b)=>{
-    const cmp=isStr ? String(a[field]||'').localeCompare(String(b[field]||''),'ru') : (a[field]||0)-(b[field]||0);
-    return dir==='asc' ? cmp : -cmp;
+    if(isStr){
+      const c=String(a[field]||'').localeCompare(String(b[field]||''),'ru');
+      return dir==='asc' ? c : -c;
+    }
+    const va=abcVal(a,field), vb=abcVal(b,field);
+    if(va===null && vb===null) return 0;
+    if(va===null) return 1;     // "—" всегда внизу, независимо от направления
+    if(vb===null) return -1;
+    return dir==='asc' ? va-vb : vb-va;
   });
   const totalRevenue=ABC_LIST.reduce((s,g)=>s+g.revenue,0);
   document.getElementById('abc-summary').innerHTML=
@@ -630,16 +656,25 @@ function renderABCTable(){
     const arrow=active?(dir==='asc'?' ▲':' ▼'):'';
     return `<th onclick="sortABC('${c.key}')" style="cursor:pointer;user-select:none${active?';color:var(--text)':''}" title="Сортировать по «${c.label}»">${c.label}${arrow}</th>`;
   }).join('')+'</tr>'+hscrollRowHtml(ABC_COLS.length)+'';
+  // Денежная ячейка: значение (всего или на 1 продажу) + % от выручки до СПП строки (не меняется от режима).
+  const money=(g,key,withPct)=>{
+    const v=abcVal(g,key);
+    if(v===null) return '<td class="muted">—</td>';
+    const pct=withPct ? `<span class="pct">${Pct(g[key],g.revenue)}</span>` : '';
+    return `<td>${Nf(v)}₽${pct}</td>`;
+  };
   for(const g of sorted){
     const npCls = g.netProfit<0?'neg':'pos';
+    const npv=abcVal(g,'netProfit');
     h+=`<tr>`+
        `<td class="lbl2" title="${g.name}">${g.name}</td>`+
        `<td>${g.orders}</td><td>${g.cancelled}</td><td>${g.buyouts}</td><td>${g.buyoutPct.toFixed(1)}%</td>`+
-       `<td>${Nf(g.revenue)}₽</td><td>${g.share.toFixed(2)}%</td>`+
+       money(g,'revenue',false)+`<td>${g.share.toFixed(2)}%</td>`+
        `<td>${Nf(g.avgCheck)}₽</td>`+
-       `<td>${Nf(g.cogs)}₽</td><td>${Nf(g.grossProfit)}₽</td>`+
-       `<td>${Nf(g.commission)}₽</td><td>${Nf(g.logiAcq)}₽</td><td>${Nf(g.storage)}₽</td><td>${Nf(g.spend)}₽</td>`+
-       `<td class="${npCls}">${Nf(g.netProfit)}₽</td><td class="${npCls}">${g.netProfitPct.toFixed(1)}%</td>`+
+       money(g,'cogs',false)+money(g,'grossProfit',true)+
+       money(g,'commission',true)+money(g,'logiAcq',true)+money(g,'storage',true)+money(g,'spend',true)+
+       (npv===null ? '<td class="muted">—</td>' : `<td class="${npCls}">${Nf(npv)}₽</td>`)+
+       `<td class="${npCls}">${g.netProfitPct.toFixed(1)}%</td>`+
        `</tr>`;
   }
   h+='</table>';
