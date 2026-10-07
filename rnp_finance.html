@@ -22,12 +22,13 @@ a.back{color:var(--accent);text-decoration:none;font-size:12px}
 .mpt{padding:6px 16px;border:1px solid var(--border);background:var(--card);color:var(--text2);
   border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
 .mpt.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0 14px 14px;max-height:min(70vh,640px);overflow:auto;-webkit-overflow-scrolling:touch}
-/* Верхний отступ карточки — НЕ padding самого .card: padding скроллящегося контейнера входит в
-   область прокрутки, и sticky top:0 прилипал на 14px НИЖЕ верхнего края — в этот просвет были видны
-   прокручиваемые строки (скриншот пользователя 07.10.2026). Отступ вынесен во внутренний блок — он
-   уезжает при прокрутке, шапка прилипает вплотную к верху. */
-.card>div{padding-top:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0;max-height:min(70vh,640px);overflow:auto;-webkit-overflow-scrolling:touch}
+/* Отступы карточки — НЕ padding самого .card: padding скроллящегося контейнера входит в область
+   прокрутки, и sticky (top:0 у шапки, left:0 у колонки «Показатель») прилипал на 14px ВНУТРЬ от края —
+   в этот просвет были видны прокручиваемые строки/цифры (скриншоты пользователя 07.10.2026: сверху и
+   слева). Отступ вынесен во внутренний блок — он уезжает при прокрутке, а шапка и первая колонка
+   прилипают вплотную к краям карточки. */
+.card>div{padding:14px}
 table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
 /* Пробовали sticky на <tr> целиком (вместо ячеек) — в тестовом браузере
    работало, но на реальном телефоне пользователя строки наезжали друг на
