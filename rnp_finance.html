@@ -196,7 +196,7 @@ async function sbGet(path){
 }
 
 const Nf = n => Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ');
-const Pct = (v,base) => base>0 ? (v/base*100).toFixed(1)+'%' : '—';
+const Pct = (v,base) => base>0 ? (v/base*100).toFixed(1)+'%' : ((v||0)===0 ? '0.0%' : '—');  // 0 при нулевой базе и нулевом значении — не прочерк (строка есть, данных нет)
 const MONTHS_RU=['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 
 // ── Бегунок горизонтальной прокрутки: своя полоса сразу под шапкой таблицы ──
@@ -342,6 +342,28 @@ function lamodaTotalRow(label, periods, key, baseKey){
   return '<tr class="total"><td class="lbl">'+label+'</td>'+cells+'</tr>';
 }
 
+// Остатки Lamoda: ручные выгрузки "Отчет по товару на стоке" (API у Lamoda нет), снимок на дату.
+// Для каждого периода берём последний снимок не позже его конца; нет снимка — 0 (не прочерк).
+const LAMODA_STOCK = [{date:'2026-10-04', qty:78}];
+const LAMODA_UNIT_COGS = 3800;   // тот же С/С за штуку, что в расчётах периодов выше
+function lamodaPeriodEnd(d){
+  if(PERIOD==='week'){
+    const t=new Date(d.key+'T00:00:00'); t.setDate(t.getDate()+6);
+    return t.toISOString().slice(0,10);
+  }
+  const y=parseInt(d.key.slice(0,4)), m=parseInt(d.key.slice(5,7));
+  return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);
+}
+function lamodaStockQty(d){
+  const end=lamodaPeriodEnd(d);
+  let q=0;
+  for(const s of LAMODA_STOCK){ if(s.date<=end) q=s.qty; }
+  return q;
+}
+
+// Структура ТОЧНО как у OZON/WB: те же функции sectionRow/metricBlock, те же строки и порядок.
+// Чего у Lamoda нет (СПП, возвраты логистики, самовыкупы, блогеры, инструменты, кросс-докинг по периодам и т.п.) —
+// показываем 0, а не пропускаем строку: пользователю важно, что строка есть и это именно ноль.
 function renderLamodaTable(){
   const all = PERIOD==='week' ? LAMODA_DATA.weekly : LAMODA_DATA.monthly;
   const periods = all.filter(function(d){ return !HIDDEN_PERIODS.has(d.key); });
@@ -349,64 +371,90 @@ function renderLamodaTable(){
   let ph='';
   for(const d of all){
     const checked = !HIDDEN_PERIODS.has(d.key) ? 'checked' : '';
-    ph+='<label><input type="checkbox" value="'+d.key+'" '+checked+' onchange="onPeriodCheck(this)"> '+d.label+(d.confirmed?'':' (\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)')+'</label>';
+    ph+='<label><input type="checkbox" value="'+d.key+'" '+checked+' onchange="onPeriodCheck(this)"> '+d.label+(d.confirmed?'':' (расчётно)')+'</label>';
   }
   document.getElementById('period-checks').innerHTML=ph;
 
   if(!periods.length){
     document.getElementById('tbl').className='';
-    document.getElementById('tbl').innerHTML='<span class="muted">\u0412\u0441\u0435 \u043f\u0435\u0440\u0438\u043e\u0434\u044b \u0441\u043a\u0440\u044b\u0442\u044b \u2014 \u0432\u043a\u043b\u044e\u0447\u0438 \u0445\u043e\u0442\u044f \u0431\u044b \u043e\u0434\u0438\u043d \u0432 \u00ab\u2699 \u041f\u0435\u0440\u0438\u043e\u0434\u044b\u00bb.</span>';
+    document.getElementById('tbl').innerHTML='<span class="muted">Все периоды скрыты — включи хотя бы один в «⚙ Периоды».</span>';
     return;
   }
 
   const n=periods.length;
-  let h='<tr><th>\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c</th>'+periods.map(function(d){ return '<th>'+d.label+(d.confirmed?'':' (\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)')+'</th>'; }).join('')+'</tr>';
+  const A=function(k){ return periods.map(function(d){ return d[k]||0; }); };
+  const Z=function(){ return periods.map(function(){ return 0; }); };
+  // единственная категория Lamoda — жилеты (весь ассортимент — «Жилет меховой»): значения категории = значениям итога
+  const CAT='Жилеты';
+  const C=function(arr){ const o={}; o[CAT]=arr; return o; };
+  const revenue=A('revenue');
+  const pctRevCat={}; pctRevCat[CAT]=revenue;
+
+  const orders=A('orders'), sales=A('sales_qty'), returns=A('returns_qty'), buyoutPct=A('buyout_pct');
+  const avgOur=A('avg_check'), cogs=A('cogs'), m1=A('m1'), commission=A('commission'), acquiring=A('acquiring');
+  const varCosts=A('var_costs'), m2=A('m2'), ad=A('ad'), m3=A('m3'), otherDed=A('other_ded'), sklad=A('sklad'), finalP=A('final_profit');
+  const periodDays = PERIOD==='week' ? 7 : 30;
+  const stockQty=periods.map(lamodaStockQty);
+  const stockValue=stockQty.map(function(q){ return q*LAMODA_UNIT_COGS; });
+  const turnover=stockQty.map(function(q,i){ return sales[i]>0 ? Math.round(q/sales[i]*periodDays) : 0; });
+
+  let h='<tr><th>Показатель</th>'+periods.map(function(d){ return '<th>'+d.label+(d.confirmed?'':' (расчётно)')+'</th>'; }).join('')+'</tr>';
   h+=hscrollRowHtml(n+1);
 
-  h+=lamodaSection('\u041e\u0431\u044a\u0451\u043c', n);
-  h+=lamodaRow('\u0417\u0430\u043a\u0430\u0437\u044b, \u0448\u0442', periods, 'orders', 'int');
-  h+=lamodaRow('\u041f\u0440\u043e\u0434\u0430\u0436\u0438 (\u0432\u044b\u043a\u0443\u043f\u044b), \u0448\u0442', periods, 'sales_qty', 'int');
-  h+=lamodaRow('\u0412\u043e\u0437\u0432\u0440\u0430\u0442\u044b, \u0448\u0442', periods, 'returns_qty', 'int');
-  h+=lamodaRow('\u0412\u044b\u043a\u0443\u043f\u0430\u0435\u043c\u043e\u0441\u0442\u044c, %', periods, 'buyout_pct', 'pct1');
-  h+=lamodaRow('\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u0447\u0435\u043a \u043d\u0430\u0448 (\u0434\u043e \u0421\u041f\u041f), \u20BD', periods, 'avg_check', 'money');
+  h+=sectionRow('Объём', n);
+  h+=metricBlock('Заказы, шт', orders, C(orders), {fmt:'int'});
+  h+=metricBlock('Продажи (выкупы), шт', sales, C(sales), {fmt:'int'});
+  h+='<tr><td class="lbl">Возвраты, шт</td>'+returns.map(function(v){ return '<td>'+v+'</td>'; }).join('')+'</tr>';
+  h+=metricBlock('Выкупаемость, %', buyoutPct, C(buyoutPct), {fmt:'pct'});
+  h+=metricBlock('Средний чек наш (до СПП), ₽', avgOur, C(avgOur));
+  h+=metricBlock('Средний чек клиента (после СПП), ₽', Z(), C(Z()));
+  h+=metricBlock('Средний уровень СПП, %', Z(), C(Z()), {fmt:'pct'});
+  h+='<tr><td class="lbl" style="font-size:11px;color:var(--text2)">— сопоставлено строк для СПП (шт)</td>'+Z().map(function(){ return '<td style="font-size:11px;color:var(--text2)">0</td>'; }).join('')+'</tr>';
 
-  h+=lamodaSection('\u0412\u044b\u0440\u0443\u0447\u043a\u0430', n);
-  h+=lamodaMoneyRow('\u0412\u044b\u0440\u0443\u0447\u043a\u0430 (\u0434\u043e \u0421\u041f\u041f)', periods, 'revenue');
-  h+=lamodaMoneyRow('\u0421\u0435\u0431\u0435\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c', periods, 'cogs', 'revenue');
-  h+=lamodaTotalRow('\u0412\u0430\u043b\u043e\u0432\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c1)', periods, 'm1', 'revenue');
+  h+=sectionRow('Выручка', n);
+  h+=metricBlock('Выручка (до СПП)', revenue, C(revenue));
+  h+=metricBlock('Выручка после СПП', Z(), C(Z()));
+  h+=metricBlock('Себестоимость', cogs, C(cogs));
+  h+=metricBlock('Валовая прибыль (М1)', m1, null, {pctBase:revenue, signColor:true});
 
-  h+=lamodaSection('\u041f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', n);
-  h+=lamodaMoneyRow('\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u041c\u041f', periods, 'commission', 'revenue');
-  h+=lamodaMoneyRow('\u042d\u043a\u0432\u0430\u0439\u0440\u0438\u043d\u0433', periods, 'acquiring', 'revenue');
-  h+='<tr><td class="lbl">\u041b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0430 \u0434\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430</td>'+periods.map(function(){ return '<td>0\u20BD</td>'; }).join('')+'</tr>';
-  h+='<tr><td class="lbl">\u0425\u0440\u0430\u043d\u0435\u043d\u0438\u0435</td>'+periods.map(function(){ return '<td>0\u20BD</td>'; }).join('')+'</tr>';
-  h+=lamodaMoneyRow('\u0418\u0442\u043e\u0433\u043e \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', periods, 'var_costs', 'revenue');
-  h+=lamodaTotalRow('\u041c\u0430\u0440\u0436\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c2)', periods, 'm2', 'revenue');
+  h+=sectionRow('Переменные расходы МП', n);
+  h+=metricBlock('Комиссия МП', commission, C(commission), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Эквайринг', acquiring, C(acquiring), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Логистика до клиента', Z(), C(Z()), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Логистика от клиента (возвраты)', Z(), C(Z()), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Хранение', Z(), C(Z()), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Итого переменные расходы МП', varCosts, C(varCosts), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Маржинальная прибыль (М2)', m2, null, {pctBase:revenue, signColor:true});
 
-  h+=lamodaSection('\u041f\u0440\u043e\u0434\u0432\u0438\u0436\u0435\u043d\u0438\u0435', n);
-  h+=lamodaMoneyRow('\u0420\u0435\u043a\u043b\u0430\u043c\u0430 \u043d\u0430 \u041c\u041f (\u0414\u0420\u0420)', periods, 'ad', 'revenue');
-  h+=lamodaTotalRow('\u041c\u0430\u0440\u0436\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u041c3)', periods, 'm3', 'revenue');
+  h+=sectionRow('Продвижение', n);
+  h+=metricBlock('Реклама на МП (ДРР)', ad, C(ad), {pctBase:revenue, pctBaseCat:pctRevCat});
+  h+=metricBlock('Самовыкупы', Z(), null, {pctBase:revenue});
+  h+=metricBlock('Блогеры', Z(), null, {pctBase:revenue});
+  h+=metricBlock('Инструменты менеджера', Z(), null, {pctBase:revenue});
+  h+=metricBlock('Маржинальная прибыль (М3)', m3, null, {pctBase:revenue, signColor:true});
 
-  h+=lamodaSection('\u041f\u0440\u043e\u0447\u0435\u0435', n);
-  h+=lamodaMoneyRow('\u041f\u0440\u043e\u0447\u0438\u0435 \u0440\u0430\u0441\u0445\u043e\u0434\u044b \u041c\u041f', periods, 'other_ded', 'revenue');
-  h+=lamodaMoneyRow('\u0421\u043a\u043b\u0430\u0434 / \u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0430 (\u043a\u0440\u043e\u0441\u0441-\u0434\u043e\u043a\u0438\u043d\u0433 \u0438 \u0442.\u043f.)', periods, 'sklad', 'revenue');
+  h+=sectionRow('Прочее', n);
+  h+=metricBlock('Прочие расходы МП', otherDed, null, {pctBase:revenue});
+  h+=metricBlock('Склад / поставка (кросс-докинг и т.п.)', sklad, null, {pctBase:revenue});
 
-  h+=lamodaSection('\u0418\u0442\u043e\u0433', n);
-  h+=lamodaTotalRow('\u041f\u0440\u0438\u0431\u044b\u043b\u044c \u041c\u041f', periods, 'final_profit', 'revenue');
-  h+=lamodaTotalRow('\u0427\u0438\u0441\u0442\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c (\u0427\u041f)', periods, 'final_profit', 'revenue');
+  h+=sectionRow('Итог', n);
+  h+=metricBlock('Прибыль МП', finalP, null, {pctBase:revenue, signColor:true});
+  h+=metricBlock('Чистая прибыль (ЧП)', finalP, null, {pctBase:revenue, signColor:true});
 
-  h+=lamodaSection('\u0417\u0430\u043f\u0430\u0441\u044b', n);
-  h+='<tr><td class="lbl">\u041e\u0441\u0442\u0430\u0442\u043e\u043a \u043d\u0430 \u043a\u043e\u043d\u0435\u0446 \u043f\u0435\u0440\u0438\u043e\u0434\u0430, \u0448\u0442</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
-  h+='<tr><td class="lbl">\u041e\u0441\u0442\u0430\u0442\u043e\u043a \u043d\u0430 \u043a\u043e\u043d\u0435\u0446 \u043f\u0435\u0440\u0438\u043e\u0434\u0430, \u20BD</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
-  h+='<tr><td class="lbl">\u041e\u0431\u043e\u0440\u0430\u0447\u0438\u0432\u0430\u0435\u043c\u043e\u0441\u0442\u044c, \u0434\u043d</td>'+periods.map(function(){ return '<td>\u2014</td>'; }).join('')+'</tr>';
+  h+=sectionRow('Запасы', n);
+  h+=metricBlock('Остаток на конец периода, шт', stockQty, C(stockQty), {fmt:'int'});
+  h+=metricBlock('Остаток на конец периода, ₽', stockValue, C(stockValue));
+  h+=metricBlock('Оборачиваемость, дн', turnover, C(turnover), {fmt:'int'});
 
   document.getElementById('tbl').className='';
   document.getElementById('tbl').innerHTML = '<table>'+h+'</table>'
     +'<div class="note" style="padding:10px 14px">'
-    +'\u0421\u0442\u0430\u0442\u0438\u0447\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 (\u043d\u0435 \u0436\u0438\u0432\u043e\u0439 \u0437\u0430\u043f\u0440\u043e\u0441). \u041f\u0435\u0440\u0438\u043e\u0434\u044b \u0441 \u043f\u043e\u043c\u0435\u0442\u043a\u043e\u0439 \u00ab(\u0440\u0430\u0441\u0447\u0451\u0442\u043d\u043e)\u00bb \u2014 \u0435\u0449\u0451 \u043d\u0435 \u0437\u0430\u043a\u0440\u044b\u0442\u044b Lamoda '
-    +'(\u043d\u0435\u0442 \u00ab\u0420\u0430\u0441\u0448\u0438\u0444\u0440\u043e\u0432\u043a\u0438 \u041f\u041f\u00bb), \u043e\u0446\u0435\u043d\u0435\u043d\u044b \u043f\u043e \u00ab\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u0430\u0437\u0430\u043c\u0438\u00bb + \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0441\u0442\u0430\u0432\u043a\u0430\u043c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0445 '
-    +'\u043f\u0435\u0440\u0438\u043e\u0434\u043e\u0432. \u041e\u0441\u0442\u0430\u043b\u044c\u043d\u044b\u0435 \u2014 \u0444\u0430\u043a\u0442 \u0438\u0437 \u0444\u0438\u043d\u0430\u043d\u0441\u043e\u0432\u043e\u0433\u043e \u043e\u0442\u0447\u0451\u0442\u0430. \u041e\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u00ab\u041f\u0440\u0438\u0431\u044b\u043b\u044c \u041c\u041f\u00bb \u0432 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0445 '
-    +'\u043f\u0435\u0440\u0438\u043e\u0434\u0430\u0445 \u2014 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440, \u0432\u0441\u044f \u0440\u0435\u043a\u043b\u0430\u043c\u0430 \u0437\u0430 \u0430\u0432\u0433\u0443\u0441\u0442 \u0440\u0430\u0437\u043e\u043c \u043b\u0435\u0433\u043b\u0430 \u0432 \u043e\u0434\u0438\u043d \u043f\u0435\u0440\u0438\u043e\u0434), \u043d\u0435 \u043e\u0448\u0438\u0431\u043a\u0430.'
+    +'Статичные данные (не живой запрос). Периоды с пометкой «(расчётно)» — ещё не закрыты Lamoda '
+    +'(нет «Расшифровки ПП»), оценены по «Управление заказами» + средним ставкам подтверждённых '
+    +'периодов. Остальные — факт из финансового отчёта. Строки, по которым у Lamoda нет данных '
+    +'(СПП, логистика, хранение, самовыкупы, блогеры и т.п.), показаны нулём — это «данных нет», '
+    +'а не пропуск. Остатки — по ручной выгрузке «Отчет по товару на стоке» (снимок 04.10). '
+    +'Отрицательная «Прибыль МП» в отдельных периодах — реальный результат, не ошибка.'
     +'</div>';
   requestAnimationFrame(function(){ initHScroll('tbl'); });
 }
