@@ -140,6 +140,7 @@ tr.total-row td{font-weight:600;border-top:1.5px solid var(--border);background:
   <div class="sum-strip">
     <div class="sc"><div class="sl">Артикулов продано</div><div class="sv" id="sumArts">—</div></div>
     <div class="sc"><div class="sl">Кол-во проданных единиц</div><div class="sv" id="sumQty">—</div></div>
+    <div class="sc"><div class="sl">Выручка нетто</div><div class="sv" id="sumRev">—</div></div>
     <div class="sc"><div class="sl">Себестоимость проданного</div><div class="sv" id="sumCost">—</div></div>
     <div class="sc"><div class="sl">Продано без себестоимости, шт</div><div class="sv" id="sumNoCost">—</div></div>
   </div>
@@ -156,6 +157,9 @@ tr.total-row td{font-weight:600;border-top:1.5px solid var(--border);background:
             <th>Наименование артикула</th>
             <th>Категория</th>
             <th class="r">Кол-во проданных единиц</th>
+            <th class="r">Выручка продаж</th>
+            <th class="r">Возвраты</th>
+            <th class="r">Выручка нетто</th>
             <th class="r">Себестоимость ед.</th>
             <th class="r">Себестоимость</th>
           </tr>
@@ -235,19 +239,24 @@ sb.auth.onAuthStateChange(async (event, session) => {
 });
 
 // ── Data fetch (постранично — PostgREST режет ответ до 1000 строк) ────
+async function fetchPage(path, offset, pageSize) {
+  const sep = path.includes('?') ? '&' : '?';
+  // order=id обязателен: без стабильной сортировки offset-пагинация может дублировать/пропускать строки
+  const url = `${SB_URL}/rest/v1/${path}${sep}order=id&limit=${pageSize}&offset=${offset}`;
+  const r = await fetch(url, { headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` } });
+  if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+// Страницы грузятся «волнами» по 4 параллельно: период в несколько месяцев — это 5-7 тысяч строк,
+// последовательная загрузка по одной странице заметно медленнее.
 async function fetchAll(path) {
-  const pageSize = 1000;
+  const pageSize = 1000, wave = 4;
   let all = [], offset = 0;
   while (true) {
-    const sep = path.includes('?') ? '&' : '?';
-    // order=id обязателен: без стабильной сортировки offset-пагинация может дублировать/пропускать строки
-    const url = `${SB_URL}/rest/v1/${path}${sep}order=id&limit=${pageSize}&offset=${offset}`;
-    const r = await fetch(url, { headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` } });
-    if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
-    const batch = await r.json();
-    all = all.concat(batch);
-    if (batch.length < pageSize) break;
-    offset += pageSize;
+    const pages = await Promise.all(Array.from({ length: wave }, (_, i) => fetchPage(path, offset + i * pageSize, pageSize)));
+    for (const b of pages) all = all.concat(b);
+    if (pages.some(b => b.length < pageSize)) break;
+    offset += wave * pageSize;
   }
   return all;
 }
@@ -279,7 +288,7 @@ async function loadReport() {
 
   try {
     // 1. Продажи/возвраты за период
-    let ftPath = `financial_transactions?select=article_id,date,transaction_type,quantity`
+    let ftPath = `financial_transactions?select=article_id,date,transaction_type,quantity,gross_revenue`
       + `&transaction_type=in.(%22Продажа%22,%22Возврат%22)`
       + `&date=gte.${dateFrom}&date=lte.${dateTo}`;
     const txns = await fetchAll(ftPath);
@@ -287,13 +296,23 @@ async function loadReport() {
     // 2. Группируем по (article_id, месяц) — qty нетто (Продажа − Возврат)
     const byArtMonth = new Map(); // "articleId|month" -> qty
     const artIds = new Set();
+    // Выручка по артикулу: в БД продажи со знаком «+», возвраты со знаком «−» (gross_revenue)
+    const revByArt = new Map(); // article_id -> {sale, ret, retNoAmtQty}
     for (const t of txns) {
       if (!t.article_id) continue;
       const month = monthStart(t.date);
       const key = `${t.article_id}|${month}`;
-      const sign = t.transaction_type === 'Возврат' ? -1 : 1;
+      const isRet = t.transaction_type === 'Возврат';
+      const sign = isRet ? -1 : 1;
       byArtMonth.set(key, (byArtMonth.get(key) || 0) + sign * (t.quantity || 0));
       artIds.add(t.article_id);
+      const rv = revByArt.get(t.article_id) || { sale: 0, ret: 0, retNoAmtQty: 0 };
+      const g = t.gross_revenue == null ? null : parseFloat(t.gross_revenue);
+      if (isRet) {
+        if (g == null) rv.retNoAmtQty += t.quantity || 0; // возврат без суммы в БД — выручку уменьшить нечем
+        else rv.ret += g;
+      } else if (g != null) rv.sale += g;
+      revByArt.set(t.article_id, rv);
     }
 
     if (artIds.size === 0) {
@@ -302,23 +321,19 @@ async function loadReport() {
       return;
     }
 
-    // 3. Справочник артикулов (только нужные id, постранично по in.())
+    // 3-4. Справочник артикулов и себестоимость — одновременно. Себестоимость только за месяцы периода
+    // (раньше грузились все месяцы подряд — в несколько раз больше строк, чем нужно).
     const idList = [...artIds];
-    let articles = [];
-    for (let i = 0; i < idList.length; i += 200) {
-      const chunk = idList.slice(i, i + 200);
-      const rows = await fetchAll(`articles?select=id,marketplace,marketplace_id,seller_article,name,category&id=in.(${chunk.join(',')})`);
-      articles = articles.concat(rows);
-    }
+    const chunks = [];
+    for (let i = 0; i < idList.length; i += 200) chunks.push(idList.slice(i, i + 200).join(','));
+    const mFrom = monthStart(dateFrom), mTo = monthStart(dateTo);
+    const [artParts, costParts] = await Promise.all([
+      Promise.all(chunks.map(ch => fetchAll(`articles?select=id,marketplace,marketplace_id,seller_article,name,category&id=in.(${ch})`))),
+      Promise.all(chunks.map(ch => fetchAll(`article_costs?select=article_id,month,cogs&article_id=in.(${ch})&month=gte.${mFrom}&month=lte.${mTo}`))),
+    ]);
+    const articles = artParts.flat();
+    const costs = costParts.flat();
     const artById = new Map(articles.map(a => [a.id, a]));
-
-    // 4. Себестоимость по месяцам для этих артикулов
-    let costs = [];
-    for (let i = 0; i < idList.length; i += 200) {
-      const chunk = idList.slice(i, i + 200);
-      const rows = await fetchAll(`article_costs?select=article_id,month,cogs&article_id=in.(${chunk.join(',')})`);
-      costs = costs.concat(rows);
-    }
     const costByArtMonth = new Map(costs.map(c => [`${c.article_id}|${c.month}`, parseFloat(c.cogs) || 0]));
 
     // 5. Собираем строки отчёта: сумма qty и cost по всем месяцам на артикул
@@ -342,9 +357,14 @@ async function loadReport() {
       if (!a) continue;
       if (mp !== 'all' && a.marketplace !== mp) continue;
       if (agg.qty <= 0) { droppedArts++; droppedQty += agg.qty; continue; } // только реально проданное (нетто > 0)
+      const rv = revByArt.get(artId) || { sale: 0, ret: 0, retNoAmtQty: 0 };
       rows.push({
         marketplace: a.marketplace || '',
         noCostQty: agg.noCostQty,
+        revSale: rv.sale,
+        revRet: rv.ret,
+        revNet: rv.sale + rv.ret,
+        retNoAmtQty: rv.retNoAmtQty,
         marketplace_id: a.marketplace_id || '',
         seller_article: a.seller_article || '',
         name: a.name || '',
@@ -386,16 +406,18 @@ function renderTable() {
     document.getElementById('sumArts').textContent = '—';
     document.getElementById('sumQty').textContent = '—';
     document.getElementById('sumCost').textContent = '—';
+    document.getElementById('sumRev').textContent = '—';
     document.getElementById('sumNoCost').textContent = '—';
-    renderWarn(0);
+    renderWarn(0, 0);
     return;
   }
 
-  let totalQty = 0, totalCost = 0, totalNoCost = 0;
+  let totalQty = 0, totalCost = 0, totalNoCost = 0, totalRevSale = 0, totalRevRet = 0, totalRetNoAmt = 0;
   body.innerHTML = REPORT_ROWS.map(r => {
     totalQty += r.qty;
     totalCost += r.totalCost;
     totalNoCost += r.noCostQty;
+    totalRevSale += r.revSale; totalRevRet += r.revRet; totalRetNoAmt += r.retNoAmtQty;
     const noCostMark = r.noCostQty ? ` <span style="color:var(--err)" title="${r.noCostQty} шт без заданной себестоимости">⚠ нет С/С</span>` : '';
     return `<tr>
       <td>${esc(MP_LABEL[r.marketplace] || r.marketplace)}</td>
@@ -404,12 +426,18 @@ function renderTable() {
       <td class="art-name">${esc(r.name)}</td>
       <td>${esc(r.category)}</td>
       <td class="r">${Nf(r.qty)}</td>
+      <td class="r">${Nf(r.revSale)}₽</td>
+      <td class="r">${Nf(r.revRet)}₽</td>
+      <td class="r">${Nf(r.revNet)}₽</td>
       <td class="r">${Nf(r.unitCost)}₽</td>
       <td class="r cost-total">${Nf(r.totalCost)}₽${noCostMark}</td>
     </tr>`;
   }).join('') + `<tr class="total-row">
       <td colspan="5">Итого, ${REPORT_ROWS.length} арт.</td>
       <td class="r">${Nf(totalQty)}</td>
+      <td class="r">${Nf(totalRevSale)}₽</td>
+      <td class="r">${Nf(totalRevRet)}₽</td>
+      <td class="r">${Nf(totalRevSale + totalRevRet)}₽</td>
       <td class="r">—</td>
       <td class="r">${Nf(totalCost)}₽</td>
     </tr>`;
@@ -420,13 +448,15 @@ function renderTable() {
   document.getElementById('sumArts').textContent = REPORT_ROWS.length;
   document.getElementById('sumQty').textContent = Nf(totalQty);
   document.getElementById('sumCost').textContent = Nf(totalCost) + '₽';
+  document.getElementById('sumRev').textContent = Nf(totalRevSale + totalRevRet) + '₽';
   document.getElementById('sumNoCost').textContent = Nf(totalNoCost);
-  renderWarn(totalNoCost);
+  renderWarn(totalNoCost, totalRetNoAmt);
 }
 
-function renderWarn(totalNoCost) {
+function renderWarn(totalNoCost, totalRetNoAmt) {
   const el = document.getElementById('warnLine');
   const parts = [];
+  if (totalRetNoAmt) parts.push(`${Nf(totalRetNoAmt)} шт возвратов в БД без суммы — «Возвраты» и «Выручка нетто» по ним не уменьшены (штуки в количестве учтены).`);
   if (totalNoCost) parts.push(`${Nf(totalNoCost)} шт продано в месяцах, где себестоимость не задана — в итоге они посчитаны по 0₽ (помечены «⚠ нет С/С»).`);
   if (REPORT_DROPPED.arts) parts.push(`${REPORT_DROPPED.arts} арт. не показаны: за период возвратов больше, чем продаж (нетто ${Nf(REPORT_DROPPED.qty)} шт).`);
   el.textContent = parts.join(' ');
@@ -446,12 +476,15 @@ function exportExcel() {
     'Наименование артикула': r.name,
     'Категория': r.category,
     'Кол-во проданных единиц': r.qty,
+    'Выручка продаж': Math.round(r.revSale * 100) / 100,
+    'Возвраты': Math.round(r.revRet * 100) / 100,
+    'Выручка нетто': Math.round(r.revNet * 100) / 100,
     'Себестоимость ед.': Math.round(r.unitCost * 100) / 100,
     'Себестоимость': Math.round(r.totalCost * 100) / 100,
     'Шт без себестоимости': r.noCostQty,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+  ws['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Себестоимость');
   const dateFrom = document.getElementById('dateFrom').value;
