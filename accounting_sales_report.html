@@ -121,6 +121,7 @@ tr.total-row td{font-weight:600;border-top:1.5px solid var(--border);background:
         <option value="all">Все</option>
         <option value="wb">WB</option>
         <option value="ozon">OZON</option>
+        <option value="lamoda">Lamoda</option>
       </select>
     </div>
     <div class="cf">
@@ -140,13 +141,16 @@ tr.total-row td{font-weight:600;border-top:1.5px solid var(--border);background:
     <div class="sc"><div class="sl">Артикулов продано</div><div class="sv" id="sumArts">—</div></div>
     <div class="sc"><div class="sl">Кол-во проданных единиц</div><div class="sv" id="sumQty">—</div></div>
     <div class="sc"><div class="sl">Себестоимость проданного</div><div class="sv" id="sumCost">—</div></div>
+    <div class="sc"><div class="sl">Продано без себестоимости, шт</div><div class="sv" id="sumNoCost">—</div></div>
   </div>
+  <div class="note" id="warnLine" style="display:none;margin:0 0 10px;color:var(--err)"></div>
 
   <div class="tbl-wrap">
     <div class="tbl-scroll">
       <table id="reportTable" style="display:none">
         <thead>
           <tr>
+            <th>Площадка</th>
             <th>Артикул платформы</th>
             <th>Артикул продавца</th>
             <th>Наименование артикула</th>
@@ -189,6 +193,8 @@ let CURRENT_SESSION = null;
 function authToken(){ return CURRENT_SESSION?.access_token || SB_ANON; }
 
 let REPORT_ROWS = []; // готовые строки отчёта, для рендера и экспорта
+let REPORT_DROPPED = { arts: 0, qty: 0 };
+const MP_LABEL = { wb: 'WB', ozon: 'OZON', lamoda: 'Lamoda' };
 
 async function doLogin() {
   const email = document.getElementById('emailInp').value.trim();
@@ -234,7 +240,8 @@ async function fetchAll(path) {
   let all = [], offset = 0;
   while (true) {
     const sep = path.includes('?') ? '&' : '?';
-    const url = `${SB_URL}/rest/v1/${path}${sep}limit=${pageSize}&offset=${offset}`;
+    // order=id обязателен: без стабильной сортировки offset-пагинация может дублировать/пропускать строки
+    const url = `${SB_URL}/rest/v1/${path}${sep}order=id&limit=${pageSize}&offset=${offset}`;
     const r = await fetch(url, { headers: { apikey: SB_ANON, Authorization: `Bearer ${authToken()}` } });
     if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
     const batch = await r.json();
@@ -321,19 +328,23 @@ async function loadReport() {
       const artId = parseInt(artIdStr);
       if (qty === 0) continue;
       const cogs = costByArtMonth.get(key) || 0;
-      const cur = perArt.get(artId) || { qty: 0, cost: 0 };
+      const cur = perArt.get(artId) || { qty: 0, cost: 0, noCostQty: 0 };
       cur.qty += qty;
       cur.cost += qty * cogs;
+      if (!cogs) cur.noCostQty += qty; // месяц без заданной себестоимости
       perArt.set(artId, cur);
     }
 
     let rows = [];
+    let droppedArts = 0, droppedQty = 0; // артикулы с нетто ≤ 0 за период (возвратов больше продаж) — в таблицу не попадают
     for (const [artId, agg] of perArt) {
-      if (agg.qty <= 0) continue; // только реально проданное (нетто > 0)
       const a = artById.get(artId);
       if (!a) continue;
       if (mp !== 'all' && a.marketplace !== mp) continue;
+      if (agg.qty <= 0) { droppedArts++; droppedQty += agg.qty; continue; } // только реально проданное (нетто > 0)
       rows.push({
+        marketplace: a.marketplace || '',
+        noCostQty: agg.noCostQty,
         marketplace_id: a.marketplace_id || '',
         seller_article: a.seller_article || '',
         name: a.name || '',
@@ -343,8 +354,9 @@ async function loadReport() {
         totalCost: agg.cost,
       });
     }
-    rows.sort((x, y) => (x.category || '').localeCompare(y.category || '') || x.seller_article.localeCompare(y.seller_article));
+    rows.sort((x, y) => x.marketplace.localeCompare(y.marketplace) || (x.category || '').localeCompare(y.category || '') || x.seller_article.localeCompare(y.seller_article));
 
+    REPORT_DROPPED = { arts: droppedArts, qty: droppedQty };
     REPORT_ROWS = rows;
     renderTable();
   } catch (e) {
@@ -374,24 +386,29 @@ function renderTable() {
     document.getElementById('sumArts').textContent = '—';
     document.getElementById('sumQty').textContent = '—';
     document.getElementById('sumCost').textContent = '—';
+    document.getElementById('sumNoCost').textContent = '—';
+    renderWarn(0);
     return;
   }
 
-  let totalQty = 0, totalCost = 0;
+  let totalQty = 0, totalCost = 0, totalNoCost = 0;
   body.innerHTML = REPORT_ROWS.map(r => {
     totalQty += r.qty;
     totalCost += r.totalCost;
+    totalNoCost += r.noCostQty;
+    const noCostMark = r.noCostQty ? ` <span style="color:var(--err)" title="${r.noCostQty} шт без заданной себестоимости">⚠ нет С/С</span>` : '';
     return `<tr>
+      <td>${esc(MP_LABEL[r.marketplace] || r.marketplace)}</td>
       <td class="mid">${esc(r.marketplace_id)}</td>
       <td>${esc(r.seller_article)}</td>
       <td class="art-name">${esc(r.name)}</td>
       <td>${esc(r.category)}</td>
       <td class="r">${Nf(r.qty)}</td>
       <td class="r">${Nf(r.unitCost)}₽</td>
-      <td class="r cost-total">${Nf(r.totalCost)}₽</td>
+      <td class="r cost-total">${Nf(r.totalCost)}₽${noCostMark}</td>
     </tr>`;
   }).join('') + `<tr class="total-row">
-      <td colspan="4">Итого, ${REPORT_ROWS.length} арт.</td>
+      <td colspan="5">Итого, ${REPORT_ROWS.length} арт.</td>
       <td class="r">${Nf(totalQty)}</td>
       <td class="r">—</td>
       <td class="r">${Nf(totalCost)}₽</td>
@@ -403,6 +420,17 @@ function renderTable() {
   document.getElementById('sumArts').textContent = REPORT_ROWS.length;
   document.getElementById('sumQty').textContent = Nf(totalQty);
   document.getElementById('sumCost').textContent = Nf(totalCost) + '₽';
+  document.getElementById('sumNoCost').textContent = Nf(totalNoCost);
+  renderWarn(totalNoCost);
+}
+
+function renderWarn(totalNoCost) {
+  const el = document.getElementById('warnLine');
+  const parts = [];
+  if (totalNoCost) parts.push(`${Nf(totalNoCost)} шт продано в месяцах, где себестоимость не задана — в итоге они посчитаны по 0₽ (помечены «⚠ нет С/С»).`);
+  if (REPORT_DROPPED.arts) parts.push(`${REPORT_DROPPED.arts} арт. не показаны: за период возвратов больше, чем продаж (нетто ${Nf(REPORT_DROPPED.qty)} шт).`);
+  el.textContent = parts.join(' ');
+  el.style.display = parts.length ? 'block' : 'none';
 }
 
 function esc(s) {
@@ -412,6 +440,7 @@ function esc(s) {
 function exportExcel() {
   if (!REPORT_ROWS.length) return;
   const data = REPORT_ROWS.map(r => ({
+    'Площадка': MP_LABEL[r.marketplace] || r.marketplace,
     'Артикул платформы': r.marketplace_id,
     'Артикул продавца': r.seller_article,
     'Наименование артикула': r.name,
@@ -419,9 +448,10 @@ function exportExcel() {
     'Кол-во проданных единиц': r.qty,
     'Себестоимость ед.': Math.round(r.unitCost * 100) / 100,
     'Себестоимость': Math.round(r.totalCost * 100) / 100,
+    'Шт без себестоимости': r.noCostQty,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+  ws['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Себестоимость');
   const dateFrom = document.getElementById('dateFrom').value;
