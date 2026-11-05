@@ -556,7 +556,11 @@ async function loadVisibilityRules(){
     VIS_RULES={};
     for(const row of data){
       if(row.articles){
-        VIS_RULES[row.articles.seller_article]={
+        // OZON-строки — цветомодели: правило размера применяем к модели (самое позднее last_visible)
+        const vk=row.articles.marketplace==='ozon'?colorModel(row.articles.seller_article):row.articles.seller_article;
+        const old=VIS_RULES[vk];
+        if(old&&(old.last_visible_year*12+old.last_visible_month)>=(row.last_visible_year*12+row.last_visible_month))continue;
+        VIS_RULES[vk]={
           last_visible_year: row.last_visible_year,
           last_visible_month: row.last_visible_month,
           marketplace: row.articles.marketplace,
@@ -579,8 +583,35 @@ async function loadComments(){
     if(!r.ok)return;
     const data=await r.json();
     COMMENTS={};
+    const ozByModel={}; // модель OZON -> [{sa,comment,article_id}] по размерам
     for(const row of data){
-      if(row.articles) COMMENTS[row.articles.seller_article]={comment:row.comment,article_id:row.article_id};
+      if(!row.articles)continue;
+      if(row.articles.marketplace==='ozon'){
+        const mk=colorModel(row.articles.seller_article);
+        (ozByModel[mk]||(ozByModel[mk]=[])).push({sa:row.articles.seller_article,comment:row.comment,article_id:row.article_id});
+      }else{
+        COMMENTS[row.articles.seller_article]={comment:row.comment,article_id:row.article_id};
+      }
+    }
+    // OZON показывается по цветомоделям: комментарии размеров сводятся в один текст модели.
+    // Одинаковые тексты схлопываются, разные подписываются размерами: "[44, 48] текст".
+    // Хранится комментарий на первом по алфавиту размере с комментарием (target); при первой правке
+    // сводный текст записывается туда, а комментарии остальных размеров этой модели удаляются
+    // (их содержимое уже в сводном тексте) — см. saveComment().
+    for(const mk in ozByModel){
+      const list=ozByModel[mk].slice().sort((a,b)=>a.sa.localeCompare(b.sa));
+      const byText=new Map();
+      for(const it of list){
+        const t=(it.comment||'').trim();
+        if(!t)continue;
+        const size=it.sa.includes('/')?it.sa.slice(it.sa.lastIndexOf('/')+1).trim():it.sa.slice(mk.length).replace(/^[\s-]+/,'');
+        if(!byText.has(t))byText.set(t,[]);
+        byText.get(t).push(size);
+      }
+      let text;
+      if(byText.size===1)text=[...byText.keys()][0];
+      else text=[...byText].map(([t,sizes])=>`[${sizes.join(', ')}] ${t}`).join('\n');
+      COMMENTS[mk]={comment:text,article_id:list[0].article_id,srcIds:list.map(x=>x.article_id)};
     }
   }catch(e){
     console.warn('loadComments error:',e);
@@ -625,14 +656,25 @@ async function saveComment(textarea,sellerArticle,mp){
   try{
     let articleId=cur?cur.article_id:null;
     if(!articleId){
-      const r=await fetch(`${SB_URL}/rest/v1/articles?select=id&seller_article=eq.${encodeURIComponent(sellerArticle)}&marketplace=eq.${encodeURIComponent(mp)}`,
-        {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
-      const rows=await r.json();
+      let rows;
+      if(mp==='ozon'){
+        // строка OZON — цветомодель, отдельного артикула с таким именем нет: берём первый по алфавиту
+        // размер этой модели (тот же, куда импорт кладёт план)
+        const r=await fetch(`${SB_URL}/rest/v1/articles?select=id,seller_article&marketplace=eq.ozon&seller_article=like.${encodeURIComponent(sellerArticle)}*&order=seller_article&limit=300`,
+          {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
+        rows=(await r.json()).filter(x=>colorModel(x.seller_article)===sellerArticle);
+      }else{
+        const r=await fetch(`${SB_URL}/rest/v1/articles?select=id&seller_article=eq.${encodeURIComponent(sellerArticle)}&marketplace=eq.${encodeURIComponent(mp)}`,
+          {headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
+        rows=await r.json();
+      }
       if(!rows.length){alert('Артикул не найден в справочнике');render();return;}
       articleId=rows[0].id;
     }
+    // все записи комментариев этой строки: у цветомодели OZON их может быть несколько (по размерам)
+    const allIds=(cur&&cur.srcIds&&cur.srcIds.length)?cur.srcIds:[articleId];
     if(!text.trim()){
-      const r=await fetch(`${SB_URL}/rest/v1/article_comments?article_id=eq.${articleId}`,
+      const r=await fetch(`${SB_URL}/rest/v1/article_comments?article_id=in.(${allIds.join(',')})`,
         {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
       // fetch() НЕ бросает исключение на HTTP-ошибку (403/500/...) — только на обрыв
       // сети. Раньше статус ответа тут не проверялся: при истёкшей сессии/сбое RLS
@@ -656,7 +698,17 @@ async function saveComment(textarea,sellerArticle,mp){
         body:JSON.stringify({article_id:articleId,comment:text.trim(),updated_at:new Date().toISOString()}),
       });
       if(!r.ok) throw new Error(`сервер отклонил сохранение (HTTP ${r.status})`);
-      COMMENTS[sellerArticle]={comment:text.trim(),article_id:articleId};
+      // Сводный текст модели уже записан на target — комментарии остальных размеров этой модели
+      // (их содержимое вошло в сводный текст) убираем, чтобы при следующей загрузке они не
+      // склеились повторно. Только после успешной записи сводного текста.
+      const others=allIds.filter(id=>id!==articleId);
+      let remaining=[articleId];
+      if(others.length){
+        const rd=await fetch(`${SB_URL}/rest/v1/article_comments?article_id=in.(${others.join(',')})`,
+          {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
+        if(!rd.ok){console.warn('не удалось убрать комментарии других размеров модели',rd.status);remaining=allIds;}
+      }
+      COMMENTS[sellerArticle]={comment:text.trim(),article_id:articleId,srcIds:remaining};
     }
   }catch(e){
     // Показываем реальную ошибку и НЕ трогаем COMMENTS — следующий render() откатит
@@ -746,10 +798,61 @@ function wbPhotoUrl(nmId){
   return`https://basket-${String(b).padStart(2,'0')}.wbbasket.ru/vol${vol}/part${part}/${n}/images/small/1.webp`;
 }
 
+// Слагаемые дня, которые при схлопывании размеров OZON в цветомодель просто суммируются.
+const DAY_SUM_KEYS=['ord','sls','rev','ret','spend','shows','clicks','cart','adOrders','adCart',
+  'cardVisits','totalShows','cancelled','stockQty','comm','logi','acq','ftrev'];
+
 function buildArticles(rows){
   const map={};
+  // OZON в РНП показываем по ЦВЕТОМОДЕЛЯМ, не по размерам (решение пользователя 05.11.2026:
+  // "по артам не нужно, нужны цветомодели"). v_daily_dashboard отдаёт строку на артикул-день
+  // (артикул OZON = цветомодель + размер), поэтому размеры одной цветомодели схлопываются тут:
+  // слагаемые дня суммируются, CTR пересчитывается из сумм, ДРР — среднее по расходу,
+  // месячные агрегаты (комиссия/логистика/выручка из финансов) и план — сумма по РАЗНЫМ размерам
+  // (план в БД лежит на одном размере модели, остальные — 0, так что сумма = план модели).
+  // WB не трогаем — там артикул и есть цветомодель.
+  const seenSA={};   // ключ строки -> Set seller_article, чьи месячные агрегаты уже учтены
+  const cw={};       // ключ -> {w,q,first} для средневзвешенной себестоимости модели
+  const cp={};       // ключ -> {s,n} для средней комиссии %
+  const cpSeen={};   // ключ -> Set seller_article, чья комиссия % уже учтена в среднем
   for(const r of rows){
-    const k=r.seller_article;
+    const grp=r.marketplace==='ozon';
+    const k=grp?colorModel(r.seller_article):r.seller_article;
+    if(!map[k]){
+      seenSA[k]=new Set([r.seller_article]);
+    }else if(grp&&!seenSA[k].has(r.seller_article)){
+      seenSA[k].add(r.seller_article);
+      const m=map[k];
+      m.plan_ord+=r.plan_orders_qty||0;
+      m.plan_buy+=r.plan_buyouts_qty||0;
+      m.plan_rev+=parseFloat(r.plan_revenue)||0;
+      m.plan_spend+=parseFloat(r.plan_spend)||0;
+      m.commission_sum+=parseFloat(r.commission_sum)||0;
+      m.acquiring_sum+=parseFloat(r.acquiring_sum)||0;
+      m.logistics_sum+=parseFloat(r.logistics_sum)||0;
+      m.ft_gross_rev+=parseFloat(r.ft_gross_rev)||0;
+      // удельные показатели плана лежат на том же размере, что и план, — берём первое ненулевое
+      if(!m.plan_drr)m.plan_drr=parseFloat(r.plan_drr)||0;
+      if(!m.plan_vc)m.plan_vc=parseFloat(r.plan_variable_cost)||0;
+      if(!m.plan_fc)m.plan_fc=parseFloat(r.plan_fixed_cost)||0;
+      if(!m.plan_comm_pct)m.plan_comm_pct=parseFloat(r.plan_commission_pct)||0;
+      if(!m.plan_logi_pct)m.plan_logi_pct=parseFloat(r.plan_logistics_pct)||0;
+      if(!m.plan_stor_pct)m.plan_stor_pct=parseFloat(r.plan_storage_pct)||0;
+      if(!m.photo_url)m.photo_url=r.photo_url||null;
+      if(!m.marketplace_id)m.marketplace_id=r.marketplace_id||null;
+    }
+    if(grp){
+      const c=cw[k]||(cw[k]={w:0,q:0,first:0});
+      const cg=parseFloat(r.cogs)||0, cq=r.confirmed_qty||0;
+      c.w+=cg*cq; c.q+=cq; if(!c.first)c.first=cg;
+      const cs=cpSeen[k]||(cpSeen[k]=new Set());
+      if(!cs.has(r.seller_article)){
+        cs.add(r.seller_article);
+        const pc=parseFloat(r.commission_pct)||0;
+        const p=cp[k]||(cp[k]={s:0,n:0});
+        if(pc){p.s+=pc;p.n++;}
+      }
+    }
     if(!map[k])map[k]={
       name:k,cat:r.category||'',days:{},
       marketplace_id:r.marketplace_id||null,
@@ -774,7 +877,7 @@ function buildArticles(rows){
       cogs:parseFloat(r.cogs)||0,
     };
     const dd=r.date.slice(8,10);
-    map[k].days[dd]={
+    const dayObj={
       // "Заказы" — ВАЛОВОЕ число (активные + отменённые), как в отчёте "по данным
       // поставщика" WB ("Заказано, шт"). orders_qty уже само по себе валовое —
       // и из API (fetch_wb_api.py считает отменённые тоже), и из файла supplier-goods
@@ -813,6 +916,23 @@ function buildArticles(rows){
       ftrev:parseFloat(r.ft_rev_day)||0,
       profit:0,
     };
+    const prev=map[k].days[dd];
+    if(!prev){
+      dayObj._drrW=dayObj.drr*dayObj.spend; // для среднего ДРР по расходу при схлопывании размеров
+      map[k].days[dd]=dayObj;
+    }else{
+      for(const f of DAY_SUM_KEYS)prev[f]+=dayObj[f];
+      prev._drrW=(prev._drrW||0)+dayObj.drr*dayObj.spend;
+      prev.drr=prev.spend>0?prev._drrW/prev.spend:0;
+      prev.ctr=prev.shows>0?Math.round(prev.clicks/prev.shows*10000)/100:0; // % из сумм кликов/показов
+    }
+  }
+  for(const k in cw){
+    const c=cw[k], m=map[k];
+    m.cogs=c.q>0?c.w/c.q:c.first; // с/с модели — по продажам размеров (у размеров одной модели бывает 1680 и 1550)
+  }
+  for(const k in cp){
+    if(cp[k].n)map[k].commission_pct=Math.round(cp[k].s/cp[k].n*10)/10;
   }
   return Object.values(map);
 }
@@ -1653,10 +1773,14 @@ function setTrendMetric(m){TREND.metric=m;renderTrendControls();renderTrendChart
 
 async function loadTrendData(){
   const mp_db=MP_DB[TREND.mp]||TREND.mp;
+  // OZON-строка — цветомодель (все её размеры): ищем по префиксу и добираем точное совпадение модели ниже
+  const ozModel=!TREND.isCategory&&mp_db==='ozon';
   const filter=TREND.isCategory
     ?`category=eq.${encodeURIComponent(TREND.category)}`
-    :`seller_article=eq.${encodeURIComponent(TREND.sellerArticle)}`;
-  const cols='date,orders_qty,confirmed_qty,confirmed_sum,spend,ad_shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs';
+    :(ozModel
+      ?`seller_article=like.${encodeURIComponent(TREND.sellerArticle)}*`
+      :`seller_article=eq.${encodeURIComponent(TREND.sellerArticle)}`);
+  const cols='date,orders_qty,confirmed_qty,confirmed_sum,spend,ad_shows,clicks,commission_day,logistics_day,acquiring_day,ft_rev_day,cogs'+(ozModel?',seller_article':'');
   const baseUrl=`${SB_URL}/rest/v1/v_daily_dashboard?marketplace=eq.${mp_db}&${filter}&date=gte.${TREND.dateFrom}&date=lte.${TREND.dateTo}&select=${cols}&order=date`;
   const pageSize=1000;let all=[];let offset=0;
   while(true){
@@ -1667,7 +1791,7 @@ async function loadTrendData(){
     if(batch.length<pageSize)break;
     offset+=pageSize;
   }
-  TREND.rawRows=all;
+  TREND.rawRows=ozModel?all.filter(x=>colorModel(x.seller_article)===TREND.sellerArticle):all;
   buildTrendBuckets();
 }
 
