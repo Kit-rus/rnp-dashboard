@@ -732,7 +732,12 @@ function isArticleVisible(art){
   // что запланировали"), артикул всё равно должен быть виден. 24.09.2026.
   const totalOrd=Object.values(art.days).reduce((s,d)=>s+(d.ord||0),0);
   const hasPlan=(art.plan_ord||0)>0||(art.plan_buy||0)>0||(art.plan_rev||0)>0;
-  if(totalOrd===0&&!hasPlan) return false;
+  // Подтверждённая продажа/возврат за месяц — тоже сигнал "артикул живой": заказ мог быть
+  // сделан раньше, а продажа (по financial_transactions) попала в этот месяц. Без этой
+  // проверки такой артикул скрывался, и строка "Итого" недосчитывала его продажи против
+  // верхних показателей кабинета (05.11.2026: WB, 3 шт. в ноябре и 3 шт. в октябре).
+  const hasSales=Object.values(art.days).some(d=>(d.sls||0)!==0||(d.rev||0)!==0||(d.ret||0)!==0);
+  if(totalOrd===0&&!hasPlan&&!hasSales) return false;
   return true;
 }
 
