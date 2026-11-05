@@ -692,7 +692,7 @@ let ABC_SORT={field:'revenue',dir:'desc'};
 // Счётчики (заказы/отменено/продажи), проценты (Выкуп %, Доля %, ЧП %) и "Ср.чек" не меняются.
 // У строк без продаж (buyouts=0) значения в этом режиме не определены — показываем "—".
 let ABC_UNIT=false;
-const ABC_MONEY_KEYS=new Set(['revenue','cogs','grossProfit','commission','logiAcq','storage','spend','netProfit']);
+const ABC_MONEY_KEYS=new Set(['revenue','cogs','grossProfit','commission','logistics','acquiring','logiAcq','storage','spend','netProfit']);
 function abcVal(g,key){
   if(ABC_UNIT && ABC_MONEY_KEYS.has(key)) return g.buyouts>0 ? g[key]/g.buyouts : null;
   return g[key];
@@ -715,7 +715,8 @@ const ABC_COLS=[
   {key:'cogs',         label:'С/С'},
   {key:'grossProfit',  label:'Вал.приб'},
   {key:'commission',   label:'Комиссия'},
-  {key:'logiAcq',      label:'Логистика'},
+  {key:'logistics',    label:'Логистика'},
+  {key:'acquiring',    label:'Эквайринг'},
   {key:'storage',      label:'Хранение'},
   {key:'spend',        label:'Реклама'},
   {key:'netProfit',    label:'ЧП'},
@@ -771,7 +772,7 @@ function renderABCTable(){
        money(g,'revenue',false)+`<td>${g.share.toFixed(2)}%</td>`+
        `<td>${Nf(g.avgCheck)}₽</td>`+
        money(g,'cogs',false)+money(g,'grossProfit',true)+
-       money(g,'commission',true)+money(g,'logiAcq',true)+money(g,'storage',true)+money(g,'spend',true)+
+       money(g,'commission',true)+money(g,'logistics',true)+money(g,'acquiring',true)+money(g,'storage',true)+money(g,'spend',true)+
        (npv===null ? '<td class="muted">—</td>' : `<td class="${npCls}">${Nf(npv)}₽</td>`)+
        `<td class="${npCls}">${g.netProfitPct.toFixed(1)}%</td>`+
        `</tr>`;
