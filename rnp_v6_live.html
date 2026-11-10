@@ -68,7 +68,7 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .mpt{padding:4px 14px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;font-size:12px;cursor:pointer;color:var(--color-text-secondary);font-family:var(--font-sans)}
 .mpt.wb{background:#CB11AB;border-color:#CB11AB;color:#fff}
 .mpt.oz{background:#005bff;border-color:#005bff;color:#fff}
-.mp-pin{padding:3px 8px;border-radius:var(--border-radius-md);border:0.5px dashed var(--color-border-secondary);background:transparent;font-size:10px;cursor:pointer;color:var(--color-text-tertiary);font-family:var(--font-sans)}
+.mp-pin{min-width:78px;text-align:left;padding:1px 8px;border-radius:var(--border-radius-md);border:0.5px dashed var(--color-border-secondary);background:transparent;font-size:10px;cursor:pointer;color:var(--color-text-tertiary);font-family:var(--font-sans)}
 .mp-pin.on{border-style:solid;color:var(--color-text-primary);background:var(--color-background-secondary)}
 .controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sel{padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);font-size:11px;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans)}
@@ -313,11 +313,13 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
 <div id="top-part">
 <div class="topbar">
   <div style="display:flex;align-items:center;gap:8px">
-    <div class="mptabs">
-      <button class="mpt wb" id="bwb" onclick="sMP('wb')">WB</button>
-      <button class="mpt"    id="boz" onclick="sMP('oz')">Ozon</button>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+      <div class="mptabs">
+        <button class="mpt wb" id="bwb" onclick="sMP('wb')">WB</button>
+        <button class="mpt"    id="boz" onclick="sMP('oz')">Ozon</button>
+      </div>
+      <button class="mp-pin" id="mp-pin" onclick="togglePinMP()" title="Какой маркетплейс открывать при загрузке и обновлении страницы (запоминается в этом браузере для вашего аккаунта)">☆ Стартовая</button>
     </div>
-    <button class="mp-pin" id="mp-pin" onclick="togglePinMP()" title="Какой маркетплейс открывать при загрузке и обновлении страницы (запоминается в этом браузере для вашего аккаунта)">☆ Сделать стартовой</button>
     <span style="font-size:11px;color:var(--color-text-tertiary)">ABELLO</span>
   </div>
   <div class="controls">
@@ -1209,8 +1211,10 @@ function updatePinUI(){
   const b=document.getElementById('mp-pin');if(!b)return;
   const pinned=getStartMP();
   const name={wb:'WB',oz:'Ozon'};
-  if(pinned===CMP){b.className='mp-pin on';b.textContent='★ Стартовая — открепить';}
-  else{b.className='mp-pin';b.textContent=pinned?`☆ Сделать стартовой (сейчас: ${name[pinned]})`:'☆ Сделать стартовой';}
+  // Подпись одной и той же длины в любом состоянии — иначе меняется ширина левого блока и
+  // «съезжает» правая панель; пояснения вынесены во всплывающую подсказку.
+  if(pinned===CMP){b.className='mp-pin on';b.textContent='★ Стартовая';b.title=`${name[pinned]} открывается при загрузке страницы. Нажмите, чтобы открепить.`;}
+  else{b.className='mp-pin';b.textContent='☆ Стартовая';b.title=pinned?`Сейчас стартовая: ${name[pinned]}. Нажмите, чтобы закрепить ${name[CMP]||''} вместо неё.`:'Нажмите, чтобы эта вкладка открывалась при загрузке и обновлении страницы.';}
 }
 function togglePinMP(){
   setStartMP(getStartMP()===CMP?null:CMP);
