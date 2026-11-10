@@ -68,6 +68,8 @@ body{font-family:var(--font-sans);background:var(--color-background-primary)}
 .mpt{padding:4px 14px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;font-size:12px;cursor:pointer;color:var(--color-text-secondary);font-family:var(--font-sans)}
 .mpt.wb{background:#CB11AB;border-color:#CB11AB;color:#fff}
 .mpt.oz{background:#005bff;border-color:#005bff;color:#fff}
+.mp-pin{padding:3px 8px;border-radius:var(--border-radius-md);border:0.5px dashed var(--color-border-secondary);background:transparent;font-size:10px;cursor:pointer;color:var(--color-text-tertiary);font-family:var(--font-sans)}
+.mp-pin.on{border-style:solid;color:var(--color-text-primary);background:var(--color-background-secondary)}
 .controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .sel{padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);font-size:11px;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans)}
 .kstrip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:1rem}
@@ -315,6 +317,7 @@ td.spark-td:hover,td.trend-cell:hover{background:var(--color-background-secondar
       <button class="mpt wb" id="bwb" onclick="sMP('wb')">WB</button>
       <button class="mpt"    id="boz" onclick="sMP('oz')">Ozon</button>
     </div>
+    <button class="mp-pin" id="mp-pin" onclick="togglePinMP()" title="Какой маркетплейс открывать при загрузке и обновлении страницы (запоминается в этом браузере для вашего аккаунта)">☆ Сделать стартовой</button>
     <span style="font-size:11px;color:var(--color-text-tertiary)">ABELLO</span>
   </div>
   <div class="controls">
@@ -1186,10 +1189,36 @@ async function populateMonthSel(){
 }
 
 // ─── State changes ────────────────────────────────────────────
-async function sMP(m){
-  CMP=m;
+// Стартовая вкладка маркетплейса (10.11.2026): пользователь фиксирует кнопкой «Сделать стартовой»,
+// выбор хранится в localStorage этого браузера отдельно для каждого аккаунта. Без закрепления —
+// как раньше, открывается WB. Для Lamoda в будущем: добавить 'lm' в START_MPS и вкладку.
+const START_MPS=['wb','oz'];
+function _pinKey(){return 'rnp_start_mp:'+(CURRENT_SESSION?.user?.id||'anon');}
+function getStartMP(){
+  try{const v=localStorage.getItem(_pinKey());return START_MPS.includes(v)?v:null;}catch(e){return null;}
+}
+function setStartMP(v){
+  try{if(v)localStorage.setItem(_pinKey(),v);else localStorage.removeItem(_pinKey());}catch(e){}
+}
+function applyMPTabs(m){
   document.getElementById('bwb').className='mpt'+(m==='wb'?' wb':'');
   document.getElementById('boz').className='mpt'+(m==='oz'?' oz':'');
+  updatePinUI();
+}
+function updatePinUI(){
+  const b=document.getElementById('mp-pin');if(!b)return;
+  const pinned=getStartMP();
+  const name={wb:'WB',oz:'Ozon'};
+  if(pinned===CMP){b.className='mp-pin on';b.textContent='★ Стартовая — открепить';}
+  else{b.className='mp-pin';b.textContent=pinned?`☆ Сделать стартовой (сейчас: ${name[pinned]})`:'☆ Сделать стартовой';}
+}
+function togglePinMP(){
+  setStartMP(getStartMP()===CMP?null:CMP);
+  updatePinUI();
+}
+async function sMP(m){
+  CMP=m;
+  applyMPTabs(m);
   await populateMonthSel();
   await reloadData();
 }
@@ -2651,7 +2680,7 @@ function applyRoleGating(session){
 let CURRENT_SESSION=null;
 function authToken(){return CURRENT_SESSION?.access_token||SB_ANON;}
 
-let _initing=false;
+let _initing=false, _startApplied=false;
 async function initApp(session){
   if(_initing)return;
   _initing=true;
@@ -2660,6 +2689,15 @@ async function initApp(session){
   document.getElementById('login-overlay').style.display='none';
   document.getElementById('app').style.display='block';
   try{
+    // Закреплённую вкладку применяем только при первой инициализации страницы: initApp зовётся
+    // и при обновлении токена сессии — тогда нельзя сбрасывать вкладку, на которую человек
+    // переключился вручную.
+    if(!_startApplied){
+      _startApplied=true;
+      const pinnedMP=getStartMP();
+      if(pinnedMP&&pinnedMP!==CMP)CMP=pinnedMP;
+    }
+    applyMPTabs(CMP);
     await Promise.all([
       populateMonthSel(),
       loadVisibilityRules(),
