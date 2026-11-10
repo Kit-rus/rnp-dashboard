@@ -574,7 +574,11 @@ async function loadVisibilityRules(){
 }
 
 // ─── Комментарии к артикулам ───────────────────────────────────
-let COMMENTS={}; // seller_article -> {comment, article_id}
+let COMMENTS={}; // "маркетплейс|seller_article" -> {comment, article_id}
+// 09.11.2026: раньше ключом был один seller_article — у WB он совпадает с цветомоделью OZON
+// (напр. "2616орех"), поэтому комментарий OZON затирал комментарий WB на экране (и наоборот), а
+// правка в одной вкладке уходила в article_id другого маркетплейса. Теперь ключ включает маркетплейс.
+const ckey=(mp,name)=>mp+'|'+name;
 
 async function loadComments(){
   try{
@@ -590,7 +594,7 @@ async function loadComments(){
         const mk=colorModel(row.articles.seller_article);
         (ozByModel[mk]||(ozByModel[mk]=[])).push({sa:row.articles.seller_article,comment:row.comment,article_id:row.article_id});
       }else{
-        COMMENTS[row.articles.seller_article]={comment:row.comment,article_id:row.article_id};
+        COMMENTS[ckey(row.articles.marketplace,row.articles.seller_article)]={comment:row.comment,article_id:row.article_id};
       }
     }
     // OZON показывается по цветомоделям: комментарии размеров сводятся в один текст модели.
@@ -611,7 +615,7 @@ async function loadComments(){
       let text;
       if(byText.size===1)text=[...byText.keys()][0];
       else text=[...byText].map(([t,sizes])=>`[${sizes.join(', ')}] ${t}`).join('\n');
-      COMMENTS[mk]={comment:text,article_id:list[0].article_id,srcIds:list.map(x=>x.article_id)};
+      COMMENTS[ckey('ozon',mk)]={comment:text,article_id:list[0].article_id,srcIds:list.map(x=>x.article_id)};
     }
   }catch(e){
     console.warn('loadComments error:',e);
@@ -626,7 +630,7 @@ function escapeHtml(s){
 // Обычное редактируемое поле комментария в строке артикула — прямоугольный
 // textarea, всегда видимый (не hover-иконка, не prompt(), не click-to-edit).
 function commentFieldHTML(sellerArticle,artKey,mp){
-  const cur=COMMENTS[sellerArticle];
+  const cur=COMMENTS[ckey(mp,sellerArticle)];
   const text=cur?cur.comment:'';
   const mpKey=mp.replace(/'/g,"\\'");
   // Очистка через пустое поле уже технически работала и раньше (saveComment
@@ -651,7 +655,7 @@ function clearComment(btn,sellerArticle,mp){
 
 async function saveComment(textarea,sellerArticle,mp){
   const text=textarea.value;
-  const cur=COMMENTS[sellerArticle];
+  const cur=COMMENTS[ckey(mp,sellerArticle)];
   if(text.trim()===(cur?cur.comment:'')){return;} // не менялось — не дёргаем сеть
   try{
     let articleId=cur?cur.article_id:null;
@@ -683,7 +687,7 @@ async function saveComment(textarea,sellerArticle,mp){
       // ошибки в моменте. Нашли на реальном кейсе "не сохраняет большие комментарии"
       // (длинный текст = дольше запрос = больше шанс поймать сбой на нём).
       if(!r.ok) throw new Error(`сервер отклонил удаление (HTTP ${r.status})`);
-      delete COMMENTS[sellerArticle];
+      delete COMMENTS[ckey(mp,sellerArticle)];
     }else{
       // on_conflict=article_id ОБЯЗАТЕЛЕН: Prefer: resolution=merge-duplicates без него
       // нацеливается на PRIMARY KEY (id), которого в теле запроса нет — правка УЖЕ
@@ -708,7 +712,7 @@ async function saveComment(textarea,sellerArticle,mp){
           {method:'DELETE',headers:{'apikey':SB_ANON,'Authorization':`Bearer ${authToken()}`}});
         if(!rd.ok){console.warn('не удалось убрать комментарии других размеров модели',rd.status);remaining=allIds;}
       }
-      COMMENTS[sellerArticle]={comment:text.trim(),article_id:articleId,srcIds:remaining};
+      COMMENTS[ckey(mp,sellerArticle)]={comment:text.trim(),article_id:articleId,srcIds:remaining};
     }
   }catch(e){
     // Показываем реальную ошибку и НЕ трогаем COMMENTS — следующий render() откатит
